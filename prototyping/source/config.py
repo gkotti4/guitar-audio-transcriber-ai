@@ -3,16 +3,19 @@ from dataclasses import dataclass
 
 @dataclass
 class Config:
-    PROJECT_ROOT = os.path.join("..")
-    DATASETS_ROOT = os.path.join("..", "data", "online", "datasets", "kaggle")
+    PROJECT_ROOT        = os.path.join("..")
+    DATASETS_ROOT       = os.path.join("..", "data", "online", "datasets", "kaggle")
+    CHECKPOINTS_ROOT    = os.path.join(DATASETS_ROOT, "checkpoints")
 
 # Optional: AudioConfig, MFCCConfig base classes
 
 @dataclass
 class MLPConfig(Config):
+    CHECKPOINTS_ROOT = os.path.join(Config.CHECKPOINTS_ROOT, "mlp")
+
     TARGET_SR               = 11025
 
-    SAVE_CHECKPOINT         = False
+    SAVE_CHECKPOINT         = True
     LOAD_CHECKPOINT         = False
 
     N_MFCC                  = 20
@@ -36,9 +39,11 @@ class MLPConfig(Config):
 
 @dataclass
 class CNNConfig(Config):
+    CHECKPOINTS_ROOT = os.path.join(Config.CHECKPOINTS_ROOT, "cnn")
+
     TARGET_SR               = 11025
 
-    SAVE_CHECKPOINT         = False
+    SAVE_CHECKPOINT         = True
     LOAD_CHECKPOINT         = False
 
     N_MELS                  = 128

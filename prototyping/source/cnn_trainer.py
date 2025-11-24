@@ -32,7 +32,7 @@ from config import *
 #		
 
 
-
+from typing import List
 
 
 
@@ -125,27 +125,94 @@ def build_dataset(root):
 
 
 class CNN(nn.Module):
-    def __init__(self, num_classes):
+    """
+    num_classes: number of output classes.
+    in_channels: input channels (1 for mono spectrogram, 2+ if stacked features).
+    base_channels: number of channels in the first conv layer.
+    num_blocks: number of conv blocks (each roughly doubles channels).
+    hidden_dim: size of the FC hidden layer before logits; if None, skip this layer.
+    dropout: dropout probability in the classifier.
+    use_batchnorm: whether to use BatchNorm2d after conv layers.
+    kernel_size: kernel size for all convs (int or tuple).
+    use_maxpool: whether to downsample with MaxPool2d in each block.
+    adaptive_pool: (H, W) of the final AdaptiveAvgPool2d to fix feature map size.
+    """
+
+    def __init__(
+        self,
+        num_classes,
+        in_channels = 1,
+        base_channels = 32,
+        num_blocks = 3,
+        hidden_dim = 256,
+        dropout = 0.1,
+        kernel_size = 3,
+        use_batchnorm = True,
+        use_maxpool = True,
+        adaptive_pool = (4, 4),
+    ):
         super().__init__()
-        
-        self.model = nn.Sequential(
-                            nn.Conv2d(1, 32, 3, padding=1), nn.BatchNorm2d(32), nn.ReLU(),
-                            nn.MaxPool2d(2),   # (H/2, W/2)
 
-                            nn.Conv2d(32, 64, 3, padding=1), nn.BatchNorm2d(64), nn.ReLU(),
-                            nn.MaxPool2d(2),   # (H/4, W/4)
+        conv_layers = []
+        channels = [in_channels]
 
-                            nn.Conv2d(64, 128, 3, padding=1), nn.BatchNorm2d(128), nn.ReLU(),
-                            nn.AdaptiveAvgPool2d((4,4)),      # fixed feature size
+        # Build channel progression: e.g. 1 → 32 → 64 → 128 for 3 blocks
+        for b in range(num_blocks):
+            in_ch = channels[-1]
+            out_ch = base_channels * (2 ** b)
+            channels.append(out_ch)
 
-                            nn.Flatten(),
-                            nn.Linear(128*4*4, 256), nn.ReLU(), nn.Dropout(0.3),
-                            nn.Linear(256, num_classes)
-                        )
-    
+            conv_layers.append(
+                nn.Conv2d(
+                    in_ch,
+                    out_ch,
+                    kernel_size=kernel_size,
+                    padding=kernel_size // 2,  # "same-ish" padding
+                )
+            )
+            if use_batchnorm:
+                conv_layers.append(nn.BatchNorm2d(out_ch))
+            conv_layers.append(nn.ReLU(inplace=True))
+
+            if use_maxpool:
+                conv_layers.append(nn.MaxPool2d(2))  # halve H,W
+
+        # Optional adaptive pooling to a fixed spatial size (independent of input H,W)
+        conv_layers.append(nn.AdaptiveAvgPool2d(adaptive_pool))
+
+        self.features = nn.Sequential(*conv_layers)
+
+        # Compute flattened feature size after conv + pool
+        feat_h, feat_w = adaptive_pool
+        feat_dim = channels[-1] * feat_h * feat_w
+
+        classifier_layers = list()
+        classifier_layers.append(nn.Flatten())
+
+        if hidden_dim is not None and hidden_dim > 0:
+            classifier_layers.extend(
+                [
+                    nn.Linear(feat_dim, hidden_dim),
+                    nn.ReLU(inplace=True),
+                ]
+            )
+            if dropout > 0.0:
+                classifier_layers.append(nn.Dropout(dropout))
+            classifier_layers.append(nn.Linear(hidden_dim, num_classes))
+        else:
+            # Directly from flattened features to logits
+            classifier_layers.append(nn.Linear(feat_dim, num_classes))
+
+        self.classifier = nn.Sequential(*classifier_layers)
+
+        # For pretty printing & consistency with your old version
+        self.model = nn.Sequential(self.features, self.classifier)
+
+        print("CNN model created: \n", self.model, end="\n\n")
+
     def forward(self, x):
-        return self.model(x)
-    
+        x = self.model(x)
+        return x
 
 class CNNTrainer():
     def __init__(
@@ -158,10 +225,11 @@ class CNNTrainer():
             lr=1e-3,
             weight_decay=1e-4
     ):
-        self.device 	= device
-        self.model 		= model #CNN(num_classes).to(self.device)
-        self.loss_fn 	= nn.CrossEntropyLoss()
-        self.opt		= torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=weight_decay)
+        self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+        self.model = model.to(self.device)
+        self.model.apply(self._init_weights_kaiming)
+        self.loss_fn = nn.CrossEntropyLoss()
+        self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=weight_decay)
         self.amp_scaler = None
 
         self._check_dims(train_dl)
@@ -175,6 +243,8 @@ class CNNTrainer():
 
         self.train_loss_history     = []
         self.train_accuracy_history = []
+        self.val_accuracy_history   = []
+        self.val_loss_history       = []
         self.epoch                  = 0
 
     def _check_dims(self, dl, model=None):
@@ -263,7 +333,7 @@ class CNNTrainer():
             return cm  # return it too if you want to use later
 
         # ---- PLOT ----
-        plt.figure(figsize=(6, 5))
+        plt.figure(figsize=figsize)
         plt.imshow(cm, cmap="Blues")
         plt.colorbar()
 
@@ -309,97 +379,160 @@ class CNNTrainer():
             history.append(bar)  # revist - delete if not used
         print(bar)
 
-    def train(self, epochs=20, train_dl=None, use_amp=True): # fit
+    def train(self, epochs = 20, train_dl=None, use_amp = True, max_clip_norm = 1.0, es_window_len=4, es_slope_limit=1e-5, plot_metrics=False):
+
+        train_dl = train_dl or self.train_dl
+        if train_dl is None:
+            print("[train] No train dataloader provided. Exiting [train].")
+            return
+        self._check_dims(train_dl)
+
+        use_amp = use_amp and (self.device.type == "cuda")
+        scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
+
+        # optional: (re)initialize histories
+        self.train_loss_history = []
+        self.train_accuracy_history = []
+
+        self.model.to(self.device)
         self.model.train()
-        use_amp = (use_amp and self.device=="cuda")
+        print("[train] CNN training start.")
 
-        loader = train_dl or self.train_dl
-        assert loader, "[train] No training DataLoader provided."
-        self._check_dims(loader)
-        
-        self.amp_scaler = torch.amp.GradScaler(self.device, enabled=self.device.type=="cuda")
-        
-        print("Dataset X tensor shape: ", self.train_dl.tensors[0].shape)
-        print("Training start.")
-        train_start_time = time.time()
-        
-        for i in range(epochs):
-            total, correct, loss_sum = 0, 0, 0.0
-                                                                                                            # Optional:
-                                                                                                            # 	GradScaler enables Automatic Mixed Precision (AMP)
-                                                                                                            # 	to speed up training on CUDA by using float16 where safe.
-            # self.amp_scaler = torch.amp.GradScaler(self.device, enabled=(use_amp and self.device=="cuda"))
-            
-            for xb, yb in loader: 																			# (X_batch, y_batch) in DataLoader
-                                                                                                            # Move data to the correct device (GPU or CPU)
-                                                                                                            # 	non_blocking=True allows asynchronous GPU transfers if pinned memory is used
-                xb, yb = xb.to(self.device, non_blocking=True), yb.to(self.device, non_blocking=True)
-                                                                                                            # Forward pass (with AMP)
-                                                                                                            
-                with torch.amp.autocast(self.device, enabled=use_amp):
-                    logits 	= self.model(xb)
-                    loss 	= self.loss_fn(logits, yb)
-                    
-                                                                                                            # Backpropagation setup
-                self.opt.zero_grad(set_to_none=True)
-                                                                                                            # Backpropagation pass + Optimizer step
-                                                                                                            # AMP branch:
-                                                                                                            #   scales loss to prevent underflow,
-                                                                                                            #   then unscales and steps optimizer safely.
-                                                                                                            # Non-AMP branch:
-                                                                                                            #   standard backward() and optimizer step
-                if self.amp_scaler.is_enabled() and use_amp:
-                    self.amp_scaler.scale(loss).backward()
-                    self.amp_scaler.step(self.opt)
-                    self.amp_scaler.update()
-                else:
-                    loss.backward()
-                    self.opt.step()
-                    
-                loss_sum 	+= loss.item() * xb.size(0)
-                correct 	+= (logits.argmax(1) == yb).sum().item()
-                total 		+= yb.size(0)
-                
-            acc 	 = correct/total
-            avg_loss = loss_sum/total
-            self.accs.append(acc)
-            self.losses.append(avg_loss)
-            print("Epoch ", i+1)
-            print("accuracy: ", format_float(acc, 2), "avg_loss: ", format_float(avg_loss, 5))
-            
-        print("Train time: ", format_time(time.time()-train_start_time))
-        #print("Training end.")
+        for ep in range(1, epochs + 1):
 
-    def evaluate(self, val_dl=None, batch_size=32, use_amp=True):
-        dl = val_dl or self.val_dl
-        assert dl is not None, "[evaluate] an val_dl must be provided."
+            epoch_loss_sum, correct, total = 0.0, 0, 0
 
-        self.model.eval()
-        loader = DataLoader(val_dl, batch_size=batch_size, shuffle=False, pin_memory=True)
-        
-        total, correct, loss_sum = 0, 0, 0.0
-        print("Evaluate start.")
-        eval_start_time = time.time()
-                
-        #with torch.no_grad():
-        with torch.inference_mode():
-            for xb, yb in loader:
-                
+            for xb, yb in train_dl:
                 xb = xb.to(self.device, non_blocking=True)
                 yb = yb.to(self.device, non_blocking=True)
-                
-                with torch.amp.autocast(self.device, enabled=(use_amp and self.device=="cuda")):
-                    logits = self.model(xb) 																	# raw, unscaled model output values
+
+                self.optimizer.zero_grad(set_to_none=True)
+
+                # ---- forward (with optional AMP) ----
+                with torch.cuda.amp.autocast(enabled=use_amp):
+                    logits = self.model(xb)
                     loss = self.loss_fn(logits, yb)
-                    
-                loss_sum 	+= loss.item() * xb.size(0)														# note: .item() converts tensor to a python float
-                correct 	+= (logits.argmax(1) == yb).sum().item()
-                total 		+= yb.size(0)
-        
-        acc 	 = correct/total
-        avg_loss = loss_sum/total
-        print("Eval time: ", format_time(time.time()-eval_start_time))
-        #print("Evaluate end.")
+
+                # ---- backward + step ----
+                if use_amp:
+                    scaler.scale(loss).backward()
+
+                    if max_clip_norm is not None:
+                        # need to unscale before clipping
+                        scaler.unscale_(self.optimizer)
+                        nn.utils.clip_grad_norm_(self.model.parameters(), max_clip_norm)
+
+                    scaler.step(self.optimizer)
+                    scaler.update()
+                else:
+                    loss.backward()
+                    if max_clip_norm is not None:
+                        nn.utils.clip_grad_norm_(self.model.parameters(), max_clip_norm)
+                    self.optimizer.step()
+
+                # ---- metrics ----
+                batch_size = yb.size(0)
+                epoch_loss_sum += loss.item() * batch_size
+
+                preds = torch.argmax(logits, dim=1)
+                correct += (preds == yb).sum().item()
+                total += batch_size
+
+            # ---- end-of-epoch metrics ----
+            epoch_loss = epoch_loss_sum / total if total > 0 else 0.0
+            epoch_acc = correct / total if total > 0 else 0.0
+            self.train_loss_history.append(epoch_loss)
+            self.train_accuracy_history.append(epoch_acc)
+            self.epoch += 1
+
+            # ---- early stop (es) val loss/acc ----
+            val_acc, val_loss = self.evaluate()
+            if ep > es_window_len + es_window_len/2:
+                last_accs = self.val_accuracy_history[-es_window_len:]  if len(self.val_accuracy_history) >= es_window_len      else np.array([])
+                last_losses = self.val_loss_history[-es_window_len:]    if len(self.val_loss_history) >= es_window_len          else np.array([])
+
+                x_data = np.arange(len(last_losses))
+                y_data = last_losses # es_window
+
+                slope, _ = np.polyfit(x_data, y_data, 1) # -> slope, bias
+
+                print(f"[train] early stop slope value: {slope:.4f}, over last {es_window_len} epochs")
+
+                if slope >= es_slope_limit:
+                    print("[train] early stop triggered: loss no longer decreasing")
+                    break
+
+                # TODO: save best model based on val loss/acc each epoch
+
+            self.val_accuracy_history.append(val_acc)
+            self.val_loss_history.append(val_loss)
+
+            print(f"[train] EPOCH {ep} / {epochs}")
+            print(
+                  f"[train] train loss: {epoch_loss:.4f} | "
+                  f"train accuracy: {epoch_acc:.4f}"
+            )
+            print("\n...\n")
+
+        # ---- overall training metrics ----
+        if plot_metrics:
+            self._2d_plot(x=np.arange(len(self.train_accuracy_history)), y=[self.train_accuracy_history, self.train_loss_history], title="Training Curves", labels=["Accuracy", "Loss"])
+            self._2d_plot(np.arange(len(self.val_accuracy_history)), [self.val_accuracy_history, self.val_loss_history], "Validation Curves", ["Accuracy", "Loss"])
+
+        print("[train] CNN training complete.\n")
+
+    def evaluate(self, val_dl=None, use_amp=True, cm=False, report=False, metrics=False):
+        dl = val_dl or self.val_dl
+        if dl is None:
+            print(f"[evaluate] No val dataloader provided.")
+            return None, None
+
+        self.model.eval()
+        correct, total, loss_sum = 0, 0, 0.0
+        preds_np = []
+        y_true = []
+
+        print("Evaluate start.")
+        eval_start_time = time.time()
+
+        use_amp = use_amp and getattr(self.device, "type", str(self.device)) == "cuda"
+
+        with torch.no_grad():
+            for xb, yb in dl:
+                xb = xb.to(self.device, non_blocking=True)
+                yb = yb.to(self.device, non_blocking=True)
+
+                # Forward pass (with optional AMP)
+                with torch.cuda.amp.autocast(enabled=use_amp):
+                    logits = self.model(xb)  # raw, unscaled model output values
+                    loss = self.loss_fn(logits, yb)
+
+                # accumulate weighted loss + accuracy
+                batch_size = xb.size(0)
+                loss_sum += loss.item() * batch_size  # weighted by batch size
+                preds = logits.argmax(dim=1)
+                correct += (preds == yb).sum().item()
+                total += batch_size
+
+                # store for metrics / confusion matrix
+                preds_np.extend(preds.cpu().numpy())
+                y_true.extend(yb.cpu().numpy())
+
+        acc = correct / total if total > 0 else 0.0
+        avg_loss = loss_sum / total if total > 0 else 0.0
+
+        if metrics:
+            # full metrics mode: normalized cm + classification report
+            self._confusion_matrix(y_true, preds_np, classes=self.class_names, plot=True, normalize=True)
+            self._classification_report(y_true, preds_np, target_names=self.class_names)
+        else:
+            if cm:
+                self._confusion_matrix(y_true, preds_np, classes=self.class_names)
+            if report:
+                self._classification_report(y_true, preds_np, target_names=self.class_names)
+
+        print("Eval time: ", format_time(time.time() - eval_start_time))
+        # print(f"[evaluate] val accuracy: {acc:.4f}, val loss: {avg_loss:.4f}")
         return acc, avg_loss
     
     def save(self, path, epoch=None, other=None):
@@ -410,7 +543,7 @@ class CNNTrainer():
             "ts": datetime.now().isoformat(timespec="seconds"),
             "epoch": int(epoch if epoch is not None else -1),
             "model": self.model.state_dict(),
-            "optimizer": self.opt.state_dict(),
+            "optimizer": self.optimizer.state_dict(),
             "loss_fn_type": type(self.loss_fn).__name__,
             "accs": getattr(self, "accs", []),
             "losses": getattr(self, "losses", []),
@@ -437,7 +570,7 @@ class CNNTrainer():
         self.model.load_state_dict(ckpt["model"], strict=True)
         
         if load_optimizer and "optimizer" in ckpt and hasattr(self, "opt"):
-            self.opt.load_state_dict(ckpt["optimizer"])
+            self.optimizer.load_state_dict(ckpt["optimizer"])
             
         # optional:
         if load_amp_scaler and "amp_scaler" in ckpt and hasattr(self, "amp_scaler"):
@@ -446,7 +579,7 @@ class CNNTrainer():
         self.accs 		= ckpt.get("accs", [])
         self.losses 	= ckpt.get("losses", [])
         
-        current_epoch 	= ckpt.get("epoch", -1) + 1 	# not in use
+        self.epoch 	= ckpt.get("epoch", -1) + 1 	# not in use
         other 			= ckpt.get("meta", {})			# ...
         
         print(f"[load] Loaded checkpoint: {path}")
@@ -458,30 +591,16 @@ class CNNTrainer():
 def main():
     #--- < CONFIG > ---
     CONFIG = CNNConfig()
-    DATASETS_ROOT = os.path.join("..", "data", "online", "datasets", "kaggle")
 
-    TARGET_SR = 11025
 
-    N_MFCC = 20
-    BATCH_SIZE = 32
-    NORMALIZE_FEATURES = False  # remember: don't use together with std scaler
-    STANDARD_SCALER = True  # remember
-    NORMALIZE_AUDIO_VOLUME = True  # new
-
-    SAVE_CHECKPOINT = False
-    LOAD_CHECKPOINT = False
+    if not os.path.isdir(CONFIG.DATASETS_ROOT):
+        raise FileNotFoundError("DATASETS_ROOT is not a valid directory.")
+    dataset_names, dataset_paths = get_available_datasets(CONFIG.DATASETS_ROOT)
 
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    if not os.path.isdir(DATASETS_ROOT):
-        raise FileNotFoundError("DATASETS_ROOT is not a valid directory.")
-    dataset_names, dataset_paths = get_available_datasets(DATASETS_ROOT)
-    ckpt_root = "checkpoints/"
-    ckpt_path = f"{ckpt_root}trainer"
-    TARGET_SR = 16000
 
-
-
+    ckpt_path = os.path.join(CONFIG.CHECKPOINTS_ROOT, "cnn_ckpt")
 
     #--- < MAIN > ---
     print("Device: ", device)
@@ -491,11 +610,12 @@ def main():
     print("Data Load Time: " + format_time(time.time() - start_time), end="\n\n")
 
     # Initialize Trainer
-    trainer = CNNTrainer(num_classes, ds, device)
-    if LOAD_CHECKPOINT:
+    model = CNN()
+    trainer = CNNTrainer(model, num_classes, ds, device)
+
+    if CONFIG.LOAD_CHECKPOINT:
         try:
-            trainer.load(ckpt_path)
-            print
+            trainer.load()
         except Exception as e:
             print("exception: ", e)
 
@@ -507,7 +627,7 @@ def main():
     print("eval accuracy: ", eval_acc)
 
     # Save
-    if SAVE_CHECKPOINT:
+    if CONFIG.SAVE_CHECKPOINT:
         trainer.save(ckpt_path)
 
 
@@ -525,66 +645,18 @@ print("Done.")
 
 
 
+
+
+
+
+
+
+
+
 # FASTAI example (wrapper over torch, retains same torch functionality
 #	learn = Learner(dls, model, loss_func=CrossEntropyLossFlat(), metrics=accuracy)
 #	learn.fit_one_cycle(5, 1e-3)
 
-'''
-MODEL LAYERS
-1. nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding)
-
-Purpose: learns local patterns — like “edges” in images or “frequency–time blobs” in spectrograms.
-
-Parameters:
-
-in_channels: input channels → 1 (your grayscale spec)
-
-out_channels: number of filters to learn (e.g., 16 or 32)
-
-kernel_size: window size (3x3 is standard)
-
-stride: how far the window moves each step (default 1)
-
-padding: adds border zeros to keep size constant
-
-
-2. nn.ReLU()
-
-Purpose: introduces non-linearity
-
-Converts negative activations to zero → lets model learn complex relationships
-
-Has no parameters.
-
-
-🪣 3. nn.MaxPool2d(kernel_size, stride)
-
-NOTE: slides a (X x X) window and keeps only the highest activation in that region
-
-Purpose: reduces spatial size while keeping the most important features.
-
-Example: nn.MaxPool2d(2) halves height and width.
-
-Reduces memory and adds small invariance (like translation tolerance).
-
-👉 (B, 16, 128, T) → (B, 16, 64, T/2)
-
-
-🧱 4. nn.Flatten()
-
-Turns (B, channels, height, width) → (B, all_features)
-
-Prepares for dense (linear) layer.
-
-
-🔗 5. nn.Linear(in_features, out_features)
-
-Fully connected (dense) layer.
-
-in_features = number of features coming from Flatten().
-
-out_features = number of classes (e.g., 6 or 37 in your dataset).
-'''
 
 
 

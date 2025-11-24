@@ -30,7 +30,7 @@ class MLP(nn.Module):
     # num_features: number of input features
     # hidden_dim: number of neurons in the first hidden layer
 
-    def __init__(self, num_features, hidden_dim, num_hidden_layers, num_classes, dropout = 0.0):
+    def __init__(self, num_features, hidden_dim, num_hidden_layers, num_classes, dropout = 0.1):
         super().__init__()
 
         layers = []
@@ -123,9 +123,10 @@ class MLPTrainer():
         self.reverse_map = reverse_map
         self.class_names = [str(reverse_map[k]) for k in sorted(reverse_map)] if reverse_map else []
 
-        self.train_loss_history = []
+        self.train_loss_history     = []
         self.train_accuracy_history = []
-        self.val_accuracy_history, self.val_loss_history = [], []
+        self.val_accuracy_history   = []
+        self.val_loss_history       = []
         self.epoch = 0
         
     def _init_weights_kaiming(self, m):
@@ -214,7 +215,7 @@ class MLPTrainer():
             return cm  # return it too if you want to use later
 
         # ---- PLOT ----
-        plt.figure(figsize=(6,5))
+        plt.figure(figsize=figsize)
         plt.imshow(cm, cmap="Blues")
         plt.colorbar()
 
@@ -260,12 +261,19 @@ class MLPTrainer():
             history.append(bar) # revist - delete if not used
         print(bar)
 
-    def train(self, epochs=20, train_dl=None, es_window_len=4, es_slope_limit=1e-5, max_clip_norm=1.0, metrics=False):
+    def train(self, epochs=20, train_dl=None, es_window_len=4, es_slope_limit=1e-5, max_clip_norm=1.0, plot_metrics=False):
 
         train_dl = train_dl or self.train_dl
-        assert train_dl is not None, "[train] No training DataLoader provided."
+        if not train_dl:
+            print("[train] No train dataloader provided. Exiting [train].")
+            return
         self._check_dims(train_dl)
 
+        # optional: (re)initialize histories
+        self.train_loss_history = []
+        self.train_accuracy_history = []
+
+        self.model.to(self.device)
         self.model.train()
         print("[train] Training start.")
 
@@ -273,16 +281,17 @@ class MLPTrainer():
             print(f"[train] EPOCH {ep}/{epochs}")
 
             epoch_loss_sum, correct, total = 0.0, 0, 0
+
             for i, (xb, yb) in enumerate(train_dl):                 # Batch:
 
                 # ---- train ----
                 xb, yb = xb.to(self.device), yb.to(self.device)
-                self.optimizer.zero_grad()                                  # reset gradients
-                logits = self.model(xb)                                     # forward pass (compute logits)
-                loss = self.loss_fn(logits, yb)                             # compute loss 
-                loss.backward()                                             # backward pass (compute gradients)
-                nn.utils.clip_grad_norm_(self.model.parameters(), max_clip_norm) # clip gradients (protect from spikes and log to detect vanishing)
-                self.optimizer.step()                                       # update weights (mini-batch gradient descent)
+                self.optimizer.zero_grad(set_to_none=True)                          # reset gradients
+                logits = self.model(xb)                                             # forward pass (compute logits)
+                loss = self.loss_fn(logits, yb)                                     # compute loss
+                loss.backward()                                                     # backward pass (compute gradients)
+                nn.utils.clip_grad_norm_(self.model.parameters(), max_clip_norm)    # clip gradients (protect from spikes and log to detect vanishing)
+                self.optimizer.step()                                               # update weights (mini-batch gradient descent)
 
                 # ---- metrics ----
                 # weighted loss:
@@ -333,11 +342,16 @@ class MLPTrainer():
             self.val_accuracy_history.append(val_acc)  
             self.val_loss_history.append(val_loss)  
 
-            print(f"[train] train loss: {epoch_loss:.4f} | train accuracy: {epoch_acc:.4f} | val loss: {val_loss:.4f} | val accuracy: {val_acc:.4f}")
+            print(
+                  f"[train] train loss: {epoch_loss:.4f} | "
+                  f"train accuracy: {epoch_acc:.4f} | "
+                  f"val loss: {val_loss:.4f} | "
+                  f"val accuracy: {val_acc:.4f}"
+            )
             print("\n...\n")
 
         # ---- overall training metrics ----
-        if metrics:
+        if plot_metrics:
             self._2d_plot(x=np.arange(len(self.train_accuracy_history)), y=[self.train_accuracy_history, self.train_loss_history], title="Training Curves", labels=["Accuracy", "Loss"])
             self._2d_plot(np.arange(len(self.val_accuracy_history)), [self.val_accuracy_history, self.val_loss_history], "Validation Curves", ["Accuracy", "Loss"])
 
@@ -352,10 +366,12 @@ class MLPTrainer():
             preds = torch.argmax(logits, dim=1)          # logits to class labels via argmax
             return preds
 
-    def evaluate(self, val_dl=None, cm=False, report=False, metrics=False):
+    def evaluate(self, val_dl=None, cm=False, report=False, show_metrics=False):
 
         dl = val_dl or self.val_dl
-        assert dl is not None, "[evaluate] No validation DataLoader provided."
+        if not dl:
+            print(f"[evaluate] No val dataloader provided.")
+            return None, None
 
         self.model.eval()
         correct, total, total_loss = 0, 0, 0.0
@@ -380,7 +396,7 @@ class MLPTrainer():
         acc      = correct / total
         avg_loss = total_loss / total
 
-        if metrics:
+        if show_metrics:
             self._confusion_matrix(y_true, preds_np, classes=self.class_names, plot=True, normalize=True)
             self._classification_report(y_true, preds_np, target_names=self.class_names)
         else:
@@ -442,44 +458,22 @@ class MLPTrainer():
 
 #                               ----- < MAIN > -----
 def main():
-    # --- config
-    CONFIG = MLPConfig()
-    DATASETS_ROOT           = CONFIG.DATASETS_ROOT
-
-    SAVE_CHECKPOINT         = CONFIG.SAVE_CHECKPOINT
-    LOAD_CHECKPOINT         = CONFIG.LOAD_CHECKPOINT
-
-    TARGET_SR               = CONFIG.TARGET_SR
-
-    N_MFCC                  = CONFIG.N_MFCC
-    BATCH_SIZE              = CONFIG.BATCH_SIZE
-    NORMALIZE_FEATURES      = CONFIG.NORMALIZE_FEATURES
-    STANDARD_SCALER         = CONFIG.STANDARD_SCALER
-    NORMALIZE_AUDIO_VOLUME  = CONFIG.NORMALIZE_AUDIO_VOLUME
-
-    HIDDEN_DIM              = CONFIG.HIDDEN_DIM
-    NUM_HIDDEN_LAYERS       = CONFIG.NUM_HIDDEN_LAYERS
-    DROPOUT                 = CONFIG.DROPOUT
-
-    EPOCHS                  = CONFIG.EPOCHS
-    ES_WINDOW_LEN           = CONFIG.ES_WINDOW_LEN
-    ES_SLOPE_LIMIT          = CONFIG.ES_SLOPE_LIMIT
-
-
     # --- setup
+    CONFIG = MLPConfig()
     start_time = time.time()
     
     # Get available datasets
-    dataset_names, dataset_paths = get_available_datasets(datasets_root=DATASETS_ROOT)
+    dataset_names, dataset_paths = get_available_datasets(datasets_root=CONFIG.DATASETS_ROOT)
     print("Available datasets:", *dataset_names, sep="\n", end="\n\n")
-    dataset_index = int(input(f"Enter dataset index (0 to {len(dataset_names)-1}): "))
-    #dataset_index = 0 # TODO: remove
-    print()
-    last_time = time.time()
+    #dataset_index = int(input(f"Enter dataset index (0 to {len(dataset_names)-1}): "))
+    dataset_index = 0 # TODO: remove
     selected_dataset_path = dataset_paths[dataset_index]
+    print(f"Selected dataset: {selected_dataset_path}\n")
+
+    ckpt_time = time.time()
 
     # build audio loader
-    audio_dataset_loader = AudioDatasetLoader(selected_dataset_path, target_sr=TARGET_SR)
+    audio_dataset_loader = AudioDatasetLoader(selected_dataset_path, target_sr=CONFIG.TARGET_SR)
 
 
     # --- feature extraction
@@ -487,14 +481,14 @@ def main():
     
     train_dl, val_dl, X, y_encoded, num_classes, reverse_map, scaler = builder.build_mfcc_train_val_dataloaders(
         audio_loader=audio_dataset_loader,
-        n_mfcc=N_MFCC,
-        batch_size=BATCH_SIZE,
+        n_mfcc=CONFIG.N_MFCC,
+        batch_size=CONFIG.BATCH_SIZE,
         val_size=0.2,
         shuffle_train=True,
         shuffle_val=False,
-        normalize_audio_volume=NORMALIZE_AUDIO_VOLUME,
-        normalize_features=NORMALIZE_FEATURES,
-        standard_scaler=STANDARD_SCALER,
+        normalize_audio_volume=CONFIG.NORMALIZE_AUDIO_VOLUME,
+        normalize_features=CONFIG.NORMALIZE_FEATURES,
+        standard_scaler=CONFIG.STANDARD_SCALER,
         seed=42,
         num_workers=0,
         pin_memory=True,
@@ -504,10 +498,10 @@ def main():
     #builder._mfcc_report()
     #builder._audio_report()
 
-    print(f"audio loading & feature extraction time: {time.time() - last_time:.2f}s")
+    print(f"audio loading & feature extraction time: {time.time() - ckpt_time:.2f}s")
     print()
 
-    last_time = time.time()
+    ckpt_time = time.time()
 
     xb,_ = next(iter(train_dl))
     num_features = xb.shape[1]
@@ -517,34 +511,30 @@ def main():
 
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("device:", device)
-    print()
+    print(f"device: {device}\n")
 
     # --- model and trainer setup
-    model = MLP(num_features, hidden_dim=HIDDEN_DIM, num_hidden_layers=NUM_HIDDEN_LAYERS, num_classes=num_classes, dropout=DROPOUT)
+    model = MLP(num_features, hidden_dim=CONFIG.HIDDEN_DIM, num_hidden_layers=CONFIG.NUM_HIDDEN_LAYERS, num_classes=num_classes, dropout=CONFIG.DROPOUT)
 
     trainer = MLPTrainer(model, train_dl, val_dl, reverse_map, device=device)
 
-    print(f"Model and Trainer setup time: {time.time() - last_time:.2f}s")
-    print()
-    last_time = time.time()
-
+    print(f"Model and Trainer setup time: {time.time() - ckpt_time:.2f}s\n")
 
     # --- load
-    if LOAD_CHECKPOINT:
+    if CONFIG.LOAD_CHECKPOINT:
         trainer.load()
 
 
     # --- training
-    trainer.train(epochs=EPOCHS, es_window_len=ES_WINDOW_LEN, es_slope_limit=ES_SLOPE_LIMIT)
+    trainer.train(epochs=CONFIG.EPOCHS, es_window_len=CONFIG.ES_WINDOW_LEN, es_slope_limit=CONFIG.ES_SLOPE_LIMIT)
 
 
     # --- evaluation
-    #trainer.evaluate(cm=True, report=True, metrics=True)
+    #trainer.evaluate(cm=True, report=True, show_metrics=True)
 
 
     # --- save
-    if SAVE_CHECKPOINT:
+    if CONFIG.SAVE_CHECKPOINT:
         trainer.save()
 
 
@@ -581,44 +571,27 @@ if __name__ == "__main__":
 #
 ###
 
+"""    DATASETS_ROOT           = CONFIG.DATASETS_ROOT
+
+    SAVE_CHECKPOINT         = CONFIG.SAVE_CHECKPOINT
+    LOAD_CHECKPOINT         = CONFIG.LOAD_CHECKPOINT
+
+    TARGET_SR               = CONFIG.TARGET_SR
+
+    N_MFCC                  = CONFIG.N_MFCC
+    BATCH_SIZE              = CONFIG.BATCH_SIZE
+    NORMALIZE_FEATURES      = CONFIG.NORMALIZE_FEATURES
+    STANDARD_SCALER         = CONFIG.STANDARD_SCALER
+    NORMALIZE_AUDIO_VOLUME  = CONFIG.NORMALIZE_AUDIO_VOLUME
+
+    HIDDEN_DIM              = CONFIG.HIDDEN_DIM
+    NUM_HIDDEN_LAYERS       = CONFIG.NUM_HIDDEN_LAYERS
+    DROPOUT                 = CONFIG.DROPOUT
+
+    EPOCHS                  = CONFIG.EPOCHS
+    ES_WINDOW_LEN           = CONFIG.ES_WINDOW_LEN
+    ES_SLOPE_LIMIT          = CONFIG.ES_SLOPE_LIMIT"""
 
 
 
 
-
-'''
-Notes to self:
-    standardize using size() vs shape[]
-    preds = tensor (torch/NN calculations), preds_np = np.array, list (metrics, non-torch related)
-
-    
-
-REPLACED CODE:
-
-def preds_to_classes(self, preds):
-    if self.reverse_map is None:
-        raise ValueError("[_to_classes] No reverse map provided for label decoding.")
-    return [self.reverse_map[p.item()] for p in preds]
-
-def evaluate(self, val_dl=None):
-
-        if val_dl is None:
-            val_dl = self.val_dl
-
-        all_preds, all_labels = [], []
-        for xb, yb in val_dl:
-            xb, yb = xb.to(self.device), yb.to(self.device)     # note: send xb to device twice (in predict) - ~OK but could be optimized
-            try:
-                preds = self.predict(xb)
-            except Exception as e:
-                print(f"Error during prediction: {e}")
-                return None
-            all_preds.append(preds.cpu())
-            all_labels.append(yb.cpu())
-
-        all_preds = torch.cat(all_preds)
-        all_labels = torch.cat(all_labels)
-        acc = (all_preds == all_labels).float().mean().item()
-        return acc
-
-'''
