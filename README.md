@@ -26,16 +26,16 @@ Expect:
 
 ## Current Goals
 
-- ✓ Build a reliable pipeline for classifying single guitar notes
-- ✓ Train and compare MLP and CNN architectures
-- ✓ Produce prediction score from multiple models (ensemble AI)
-- ✓ Establish feature processing (MFCC / Mel-Spectrograms)
-- ✓ Build dataset loaders, slicing tools, and training loops
-- ~ Create dataset via slicing tool on recorded guitar clips
-- Add fine-tuning and domain adaptation (acoustic → electric)
-- ~ Expand beyond single-note classification
-- ~ Begin mapping predictions to playable guitar tablature
-- Investigate polyphonic transcription and chord recognition
+- [x] Build a reliable pipeline for classifying single guitar notes
+- [x] Train and compare MLP and CNN architectures
+- [x] Produce prediction score from multiple models (ensemble AI)
+- [x] Establish feature processing (MFCC / Mel-Spectrograms)
+- [x] Build dataset loaders, slicing tools, and training loops
+- [x] Create dataset via slicing tool on recorded guitar clips
+- [ ] Add fine-tuning and domain adaptation (acoustic → electric)
+- [ ] Expand beyond single-note classification
+- [x] Begin mapping predictions to playable guitar tablature
+- [ ] Investigate polyphonic transcription and chord recognition
 
 ---
 
