@@ -7,27 +7,25 @@ import soundfile as sf
 import numpy as np
 
 
-# Note: we can preprocess the audio wavs first before,
-#        like removing anything under a certain db !
-
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 AUDIO_NAME = "E2_Only"
 TIME_STAMP = datetime.now().strftime("%m-%d_%H-%M-%S")
 
 IN_AUDIO_ROOT = PROJECT_ROOT / "data" / "inference" / "guitar_audio"
-IN_AUDIO_PATH = IN_AUDIO_ROOT / AUDIO_NAME / f"{AUDIO_NAME}.wav"
+IN_AUDIO_PATH = IN_AUDIO_ROOT / AUDIO_NAME / f"{AUDIO_NAME}.wav"        # in Track
 
 OUT_CLIPS_ROOT = PROJECT_ROOT / "data" / "inference" / "guitar_note_clips"
-OUT_CLIPS_DIR = OUT_CLIPS_ROOT / AUDIO_NAME / TIME_STAMP
+OUT_CLIPS_DIR = OUT_CLIPS_ROOT / AUDIO_NAME / TIME_STAMP                # out Clip folder
 
 
-MIN_IN_AUDIO_DB = -60.0
+MIN_IN_DB_THRESHOLD = -45.0
+MIN_RMS_DB          = -37.5
 
 TARGET_SR = 11025
 
 
-HOP_LEN = 256*3 # window size for detection
+HOP_LEN = (256 * 3) # window size for detection
 
 MIN_SEP = 0.25 # secs
 
@@ -47,7 +45,7 @@ def load_wav(path, sr=TARGET_SR):
 
 
 # -- audio (pre)processing
-def apply_db_threshold(y, min_db=MIN_IN_AUDIO_DB): # zero_below_db, apply_noise_gate
+def apply_db_threshold(y, min_db=MIN_IN_DB_THRESHOLD): # zero_below_db, apply_noise_gate
     # zero out samples whose amplitude is below `min_db`
 
     eps = 1e-10
@@ -62,11 +60,11 @@ def apply_db_threshold(y, min_db=MIN_IN_AUDIO_DB): # zero_below_db, apply_noise_
 
 
 # -- per slice preprocessing
-def is_slice_loud_enough(clip, min_db=-40.0):
+def is_slice_loud_enough(clip, min_rms_db=MIN_RMS_DB):
     eps = 1e-10
     rms = np.sqrt(np.mean(clip**2)) # root mean squared - avg. energy or loudness of a signal
     rms_db = 20 * np.log10(rms + eps)
-    return rms_db > min_db
+    return rms_db > min_rms_db
 
 
 
@@ -115,7 +113,7 @@ def save_clip(clip, sr, out_dir, idx, onset_s):
 
 def sliceNsave(audio_path, out_dir=OUT_CLIPS_DIR):
     y, sr = load_wav(audio_path, TARGET_SR)
-    y_gated = apply_db_threshold(y, min_db=MIN_IN_AUDIO_DB)
+    y_gated = apply_db_threshold(y, min_db=MIN_IN_DB_THRESHOLD)
     onsets = detect_onsets(y=y_gated, sr=sr)
     print("onsets: ")
     for x in onsets:
@@ -123,7 +121,7 @@ def sliceNsave(audio_path, out_dir=OUT_CLIPS_DIR):
     for i, sample in enumerate(onsets):
         next_onset = onsets[i+1] if i + 1 < len(onsets) else onsets[-1]
         clip = slice_audio(y=y, onset_sample=sample, next_onset=next_onset, sr=sr, length_sec=CLIP_LENGTH)
-        if not is_slice_loud_enough(clip, min_db=MIN_IN_AUDIO_DB):
+        if not is_slice_loud_enough(clip, min_db=MIN_IN_DB_THRESHOLD):
             continue
         onset_s = sample / sr
         save_clip(clip, sr, out_dir, i, onset_s)
