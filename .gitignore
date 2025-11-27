@@ -2,6 +2,8 @@
 data/
 Datasets/
 datasets/
+Samples/
+Recordings/
 *.wav
 *.mp3
 *.flac
@@ -15,7 +17,7 @@ datasets/
 *.h5
 *.csv
 checkpoints/
-models/
+Model Data/
 
 # Python noise
 __pycache__/
