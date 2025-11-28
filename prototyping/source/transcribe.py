@@ -1,5 +1,6 @@
 import os, time
 from pathlib import Path
+from datetime import datetime
 from pprint import pprint
 
 from config import *
@@ -60,9 +61,17 @@ class Transcriber():
         #self.model_configs["cnn"] = self.cnn_ckpt_data["config"]
 
 
-    def transcribe(self, audio_dir):
+
+
+    def transcribe(self, audio_path, out_root, audio_name="audio", target_sr=11025, clips_len=0.5):
+        timestamp = datetime.now().strftime("%m-%d_%H-%M-%S")
+        out_dir = out_root / f"{audio_name}_{timestamp}"
+
+        # slice audio to clips
+        self.slicer.sliceNsave(audio_path, out_dir, target_sr, length_sec=clips_len)
+
         # load clips in database format
-        audio_loader = AudioDatasetLoader(audio_dir)
+        audio_loader = AudioDatasetLoader(out_root)
 
         # convert to features using the same preprocessing as trained models
         mfcc_features, melspec_features = self.feature_builder.extract_inference_features(audio_loader, self.model_configs["mlp"], self.model_configs["cnn"], self.mlp_ckpt_data["scaler"])
@@ -79,11 +88,15 @@ class Transcriber():
 
 def main():
     cfg = TranscribeConfig()
+
     audio_name = "E2_Only"
-    audio_dir = cfg.INFERENCE_AUDIO_ROOT / audio_name
+
+    in_audio_path = cfg.INFERENCE_AUDIO_ROOT / audio_name / f"{audio_name}.wav"
+
+    out_audio_root = cfg.INFERENCE_CLIPS_ROOT / "Transcriber"
 
     transcriber = Transcriber()
-    transcriber.transcribe(audio_dir)
+    transcriber.transcribe(in_audio_path, out_audio_root, audio_name, target_sr=11025, clips_len=0.5)
 
     print("SUCCESS!")
 

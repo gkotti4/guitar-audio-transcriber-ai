@@ -80,5 +80,6 @@ class CNNConfig(Config):
 
 
 class TranscribeConfig(Config):
-    INFERENCE_AUDIO_ROOT = PROJECT_ROOT / "data" / "inference" / "guitar_note_clips"
+    INFERENCE_CLIPS_ROOT = PROJECT_ROOT / "data" / "inference" / "guitar_note_clips"
+    INFERENCE_AUDIO_ROOT = PROJECT_ROOT / "data" / "inference" / "guitar_audio"
     TARGET_SR: int = 11025

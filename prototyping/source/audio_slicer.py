@@ -39,7 +39,7 @@ class AudioSlicer:
         pass
 
     @staticmethod
-    def load_wav(self, path, sr=_TARGET_SR):
+    def load_wav(path, sr=_TARGET_SR):
         if not os.path.exists(path):
             raise FileNotFoundError(f"[load_audio] File not found at: {path}")
 
@@ -48,7 +48,7 @@ class AudioSlicer:
 
     # -- audio (pre)processing
     @staticmethod
-    def apply_db_threshold(self, y, min_db=_MIN_IN_DB_THRESHOLD): # zero_below_db, apply_noise_gate
+    def apply_db_threshold(y, min_db=_MIN_IN_DB_THRESHOLD): # zero_below_db, apply_noise_gate
         # zero out samples whose amplitude is below `min_db`
 
         eps = 1e-10
@@ -63,7 +63,7 @@ class AudioSlicer:
 
     # - rms threshold
     @staticmethod
-    def compute_rms_db(self, y, sr=_TARGET_SR, frame_len=2048, hop_len=_HOP_LEN):
+    def compute_rms_db(y, sr=_TARGET_SR, frame_len=2048, hop_len=_HOP_LEN):
         rms = librosa.feature.rms(
             y=y,
             frame_length=frame_len,
@@ -75,7 +75,7 @@ class AudioSlicer:
 
     @staticmethod
     def compute_dynamic_thresholds(
-            self,
+            #self,
             rms_db,
             noise_pct=20,
             signal_pct=75,
@@ -95,7 +95,7 @@ class AudioSlicer:
         return gate_db, slice_min_db, (noise_floor, signal_floor)
 
     def apply_rms_threshold(self, y, hop_len=_HOP_LEN):
-        rms_db = self.compute_rms_db(y, hop_len=hop_len)
+        rms_db = self.compute_rms_db(y=y, hop_len=hop_len)
 
         gate_db, slice_min_db, stats = self.compute_dynamic_thresholds(rms_db)
 
@@ -122,7 +122,7 @@ class AudioSlicer:
 
     # -- per slice preprocessing
     @staticmethod
-    def is_slice_loud_enough(self, clip, min_rms_db=_MIN_SLICE_RMS_DB):
+    def is_slice_loud_enough(clip, min_rms_db=_MIN_SLICE_RMS_DB):
         eps = 1e-10
         rms = np.sqrt(np.mean(clip**2)) # root mean squared - avg. energy or loudness of a signal
         rms_db = 20 * np.log10(rms + eps)
@@ -132,7 +132,7 @@ class AudioSlicer:
 
     # -- onset detection slicing
     @staticmethod
-    def detect_onsets(self, y, sr=_TARGET_SR, hop_len=_HOP_LEN, min_sep=_MIN_SEP):
+    def detect_onsets(y, sr=_TARGET_SR, hop_len=_HOP_LEN, min_sep=_MIN_SEP):
         onset_env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=hop_len)
 
         frames = librosa.onset.onset_detect(onset_envelope=onset_env, sr=sr, hop_length=hop_len, backtrack=True) # backtrack here? or manual?
@@ -151,7 +151,7 @@ class AudioSlicer:
         return filtered     # list of indices where onsets (notes) start
 
     @staticmethod
-    def slice_audio(self, y, onset, next_onset, sr=_TARGET_SR, length_sec=_CLIP_LENGTH):
+    def slice_audio(y, onset, next_onset, sr=_TARGET_SR, length_sec=_CLIP_LENGTH):
         length = int(length_sec * sr)
         start = onset
         end = min(start + length, next_onset)
@@ -164,17 +164,17 @@ class AudioSlicer:
 
     @staticmethod
     def save_clip(clip, sr, out_dir, idx, onset_s):
-        out_root = Path(out_dir)
-        out_root.mkdir(parents=True, exist_ok=True)
+        out_dir = Path(out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
         fname = f"{_AUDIO_NAME}__{onset_s:.3f}s_{idx}.wav"
-        sf.write((out_root / fname), clip, sr)
+        sf.write((out_dir / fname), clip, sr)
 
 
     def sliceNsave(self, audio_path, out_dir=_OUT_CLIPS_DIR, target_sr=_TARGET_SR, hop_len=_HOP_LEN, length_sec=_CLIP_LENGTH):
         y, sr = self.load_wav(audio_path, target_sr)
-        y_gated = self.apply_db_threshold(y, min_db=_MIN_IN_DB_THRESHOLD)
+        y_gated = self.apply_db_threshold(y=y, min_db=_MIN_IN_DB_THRESHOLD)
         y_gated = self.apply_rms_threshold(y_gated, hop_len=hop_len)
-        onsets = self.detect_onsets(y_gated, sr=sr)
+        onsets = self.detect_onsets(y=y_gated, sr=sr)
         total = 0
         for i, onset in enumerate(onsets):
             next_onset = onsets[i+1] if i + 1 < len(onsets) else onsets[-1]
@@ -195,8 +195,9 @@ class AudioSlicer:
 
 
 def main():
-    slicer = AudioSlicer()
-    slicer.sliceNsave(_IN_AUDIO_PATH, _OUT_CLIPS_DIR)
+    #slicer = AudioSlicer()
+    #slicer.sliceNsave(_IN_AUDIO_PATH, _OUT_CLIPS_DIR)
+    pass
 
 
 
