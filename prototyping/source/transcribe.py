@@ -1,93 +1,91 @@
-import os, argparse
+import os, time
+from pathlib import Path
+from pprint import pprint
 
-from dataset_loader import AudioDatasetLoader, AVAILABLE_DATASETS, DATASETS_NUM_CLASSES, get_dataset_num_classes
+from config import *
+from audio_preprocessing import AudioDatasetLoader, MelFeatureBuilder, get_available_datasets
+from audio_slicer import AudioSlicer
+from note_predictor import NotePredictor
 
-
-# Config
-SONG_PATH = "Samples/Gb_comp.wav"
-
-SEED = 42  
-DURATION = 0.5
-DATASET = AVAILABLE_DATASETS[0]
-NUM_CLASSES = get_dataset_num_classes(DATASET)
-
-
-
-
-'''
-def load_trained_mlp(hidden_dim=64, lr=0.0005, epochs=25000, dataset=DATASET, duration=DURATION):
-    model = MLPClassifier(hidden_dim, lr, dataset, duration)
-    model.train(epochs)
-    return model
-
-
-def load_trained_cnn(lr=0.001, wdecay=0, batch_size=64, test_size=0.2, epochs=50, seed=SEED, sr=44100, dataset=DATASET, dataset_loader_cls=AudioDatasetLoader, model_path=None, loader_path=None, duration=DURATION):
-
-    if model_path and loader_path:
-        trainer = trainer.load_model(
-        "cnn_0.pkl", 
-        "cnn_0.le.pkl", 
-        dataset_name=dataset,
-        dataset_loader_cls=dataset_loader_cls,
-        batch_size=batch_size,
-        test_size=test_size,
-        seed=seed,
-        sr=sr,
-        duration=duration,
-        n_mfcc=13,
-        hop_length=512,
-        lr=lr,
-        weight_decay=wdecay
-        )
-
-    else:
-        trainer = CNNTrainer(
-        dataset_name=dataset,
-        dataset_loader_cls=dataset_loader_cls,
-        batch_size=batch_size,
-        test_size=test_size,
-        seed=seed,
-        sr=sr,
-        duration=duration,
-        n_mfcc=13,
-        hop_length=512,
-        lr=lr,
-        weight_decay=wdecay
-        )
-
-    trainer.train(epochs)
-    return trainer
-
-
-def load_trained_log_reg(dataset=DATASET):
-    model = LogisticRegressionClassifier(dataset_name=dataset)
-    model.train()
-    return model
-'''
+import torch
+import numpy as np
 
 
 
 class Transcriber():
     def __init__(self):
-        pass
-    
-    
+
+        self.device = torch.device("cpu") #torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.slicer = AudioSlicer()
+        self.feature_builder = MelFeatureBuilder()
+        self.predictor = NotePredictor()
+
+        self.mlp_ckpt_data = None
+        self.cnn_ckpt_data = None
+        self.model_configs = {"mlp": None, "cnn": None}
+
+        self.load_model_data()
+        if self.mlp_ckpt_data is None or self.cnn_ckpt_data is None:
+            raise ValueError("[Transcriber] No MLP or CNN checkpoint found. load_model_data() unsuccessful.")
+
+        self.model_configs["mlp"] = self.mlp_ckpt_data["config"]
+        self.model_configs["cnn"] = self.cnn_ckpt_data["config"]
+        if self.model_configs["mlp"] is None or self.model_configs["cnn"] is None:
+            raise ValueError("[Transcriber] No MLP or CNN config found.")
+
+        self.predictor.load_models(self.mlp_ckpt_data, self.cnn_ckpt_data)
 
 
+    def load_model_data(
+            self,
+            mlp_ckpt: str = "mlp_ckpt.ckpt",
+            cnn_ckpt: str = "cnn_ckpt.ckpt",
+            mlp_root: str = "checkpoints/mlp/",
+            cnn_root: str = "checkpoints/cnn/"
+    ):
+        # ---- Load MLP checkpoint ----
+        mlp_path = os.path.join(mlp_root, mlp_ckpt)
+        if not os.path.isfile(mlp_path):
+            raise FileNotFoundError(f"[load_models] No MLP checkpoint found: {mlp_path}")
+
+        self.mlp_ckpt_data = torch.load(mlp_path, map_location="cpu", weights_only=False)
+        #self.model_configs["mlp"] = self.mlp_ckpt_data["config"]
+
+        # ---- Load CNN checkpoint ----
+        cnn_path = os.path.join(cnn_root, cnn_ckpt)
+        if not os.path.isfile(cnn_path):
+            raise FileNotFoundError(f"[load_models] No MLP checkpoint found: {mlp_path}")
+
+        self.cnn_ckpt_data = torch.load(cnn_path, map_location="cpu", weights_only=False)
+        #self.model_configs["cnn"] = self.cnn_ckpt_data["config"]
 
 
+    def transcribe(self, audio_dir):
+        # load clips in database format
+        audio_loader = AudioDatasetLoader(audio_dir)
 
-def main(): 
+        # convert to features using the same preprocessing as trained models
+        mfcc_features, melspec_features = self.feature_builder.extract_inference_features(audio_loader, self.model_configs["mlp"], self.model_configs["cnn"], self.mlp_ckpt_data["scaler"])
 
-    pass
+        # predict to note labels
+        prediction = self.predictor.predict(mfcc_features, melspec_features)
 
-''' 
-    loader = AudioDatasetLoader(duration=DURATION)
-    _, _, le = loader.load_features() 
-    segmenter = OnsetSegmenter(duration=DURATION)
-    mfccs, times = segmenter.load_mfcc_segments(SONG_PATH)
-    #audios, audios_times = segmenter.load_audio_segments(SONG_PATH)
-'''
+        # map to TAB
+        # - - - - - -
+
+        pprint(" ".join(str(x) for x in prediction["labels"]))
+
+        return prediction
+
+def main():
+    cfg = TranscribeConfig()
+    audio_name = "E2_Only"
+    audio_dir = cfg.INFERENCE_AUDIO_ROOT / audio_name
+
+    transcriber = Transcriber()
+    transcriber.transcribe(audio_dir)
+
+    print("SUCCESS!")
 
     
     

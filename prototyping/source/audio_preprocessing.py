@@ -10,11 +10,12 @@ from sklearn.model_selection import train_test_split
 import torch
 import torchaudio as ta
 from torch.utils.data import Dataset, TensorDataset, DataLoader
-from config import Config
-CONFIG = Config()
+from config import Config, MLPConfig, CNNConfig
+
+_CONFIG = Config()
 
 
-def get_available_datasets(datasets_root=CONFIG.DATASETS_ROOT,):
+def get_available_datasets(datasets_root=_CONFIG.DATASETS_ROOT):
     if not os.path.exists(datasets_root):
         print("[get_available_datasets] Dataset directory not found.")
         return [], []
@@ -234,12 +235,39 @@ class MelFeatureBuilder:
     def _normalize_audio_volume(self, y, eps=1e-9):
         return y / (np.max(np.abs(y)) + eps)
 
+    def extract_inference_features(self,
+                                   audio_loader: AudioDatasetLoader,
+                                   mlp_config: MLPConfig,
+                                   cnn_config: CNNConfig,
+                                   scaler: StandardScaler = None
+    ):
+
+        mfcc_features,_,_,_ = self.extract_mfcc_features(
+            audio_loader,
+            mlp_config.N_MFCC,
+            mlp_config.NORMALIZE_FEATURES,
+            mlp_config.NORMALIZE_AUDIO_VOLUME
+        )
+        if scaler: # or if mlp_config.STANDARD_SCALER
+            mfcc_features = scaler.transform(mfcc_features)
+
+        melspec_features,_,_,_ = self.extract_melspec_features(
+            audio_loader,
+            cnn_config.N_MELS,
+            cnn_config.N_FFT,
+            cnn_config.HOP_LENGTH,
+            cnn_config.NORMALIZE_AUDIO_VOLUME
+        )
+
+        return mfcc_features, melspec_features
+
     # --- MFCC Functions ---
     def extract_mfcc_features(self,
                               audio_loader,
                               n_mfcc=13,
                               normalize_features: bool = False,
-                              normalize_audio_volume: bool = False):
+                              normalize_audio_volume: bool = False
+    ):
         """
         Convert audio to MFCCs (mean pooled over time).
 

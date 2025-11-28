@@ -2,6 +2,9 @@ import os
 from pathlib import Path
 from dataclasses import dataclass
 
+from tools.recording_slicer.recording_slicer import PROJECT_ROOT
+
+
 @dataclass
 class Config:
     PROJECT_ROOT: str        = str(Path(__file__).resolve().parent.parent)
@@ -74,3 +77,8 @@ class CNNConfig(Config):
 
     #NORMALIZE_FEATURES      = False
     #STANDARD_SCALER         = True
+
+
+class TranscribeConfig(Config):
+    INFERENCE_AUDIO_ROOT = PROJECT_ROOT / "data" / "inference" / "guitar_note_clips"
+    TARGET_SR: int = 11025
