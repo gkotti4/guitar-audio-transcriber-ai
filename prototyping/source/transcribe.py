@@ -3,6 +3,9 @@ from pathlib import Path
 from datetime import datetime
 from pprint import pprint
 
+import tkinter as tk
+from tkinter import filedialog, messagebox
+
 from config import *
 from audio_processing.audio_preprocessing import AudioDatasetLoader, MelFeatureBuilder, get_available_datasets
 from audio_processing.audio_slicer import AudioSlicer
@@ -93,11 +96,26 @@ def main():
     in_audio_path = base_cfg.INFERENCE_AUDIO_ROOT / f"{audio_name}.wav"
     out_audio_root = base_cfg.INFERENCE_CLIPS_ROOT / "Transcriber"
 
-    transcriber = Transcriber()
-    result = transcriber.transcribe(in_audio_path, out_audio_root, audio_name, clip_target_sr=11025, clip_len=0.5)
+    # minimal TK root (hidden)
+    root = tk.Tk()
+    root.withdraw()
 
-    print(" ".join(str(x[:4]) for x in result["labels"]))
-    print(" ".join(f"{x:.2f}" for x in result["confidences"]))
+    file_path = filedialog.askopenfilename(
+        title="Select guitar audio file",
+        filetypes=(("WAV files", "*.wav"), ("All files", "*.*")),
+    )
+    if not file_path:
+        messagebox.showerror("Error", "No file selected.")
+        return
+
+    in_audio_path = Path(file_path)
+    audio_name = in_audio_path.stem
+
+    transcriber = Transcriber()
+    prediction = transcriber.transcribe(in_audio_path, out_audio_root, audio_name, clip_target_sr=11025, clip_len=0.5)
+
+    print(" ".join(str(x[:4]) for x in prediction["labels"]))
+    print(" ".join(f"{x:.2f}" for x in prediction["confidences"]))
 
     print("\nTranscriber finished.\n")
 
