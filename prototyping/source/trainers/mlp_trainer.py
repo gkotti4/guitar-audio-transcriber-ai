@@ -490,7 +490,7 @@ class MLPTrainer():
 
 
 
-
+'''
 def main(): # DEPRECIATING - MOVING TO TRAINING MANAGER
     start_time = time.time()
     # --- config
@@ -579,12 +579,10 @@ def main(): # DEPRECIATING - MOVING TO TRAINING MANAGER
     print(f"Training time: {time.time() - last_time:.2f}s\n")
 
     print("\n--- mlp_trainer execution complete ---\n")
-
-
 if __name__ == "__main__":
     #main()
     pass
-
+'''
 
 
 

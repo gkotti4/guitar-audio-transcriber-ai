@@ -529,7 +529,7 @@ class CNNTrainer():
         
         
 
-
+'''
 def main(): # DEPRECIATING - MOVING TOWARDS TRAINING MANAGER
     start_time = time.time()
     #--- < CONFIG > ---
@@ -616,12 +616,10 @@ def main(): # DEPRECIATING - MOVING TOWARDS TRAINING MANAGER
     print(f"Training time: {time.time() - last_time:.2f}s\n")
 
     print("\n--- cnn_trainer execution complete ---\n")
-
-
 if __name__ == "__main__":
     #main()
     pass
-
+'''
 
 
 

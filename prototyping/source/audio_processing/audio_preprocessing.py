@@ -11,35 +11,45 @@ import torch
 import torchaudio as ta
 from torch.utils.data import Dataset, TensorDataset, DataLoader
 from config import *
+from dsp_algorithms.yin import YinDsp
 
 
 def get_available_datasets(datasets_root):
-    if not os.path.exists(datasets_root):
-        print("[get_available_datasets] Dataset directory not found.")
+    datasets_root = Path(datasets_root)
+    if not datasets_root.exists():
+        print(f"[get_available_datasets] Dataset directory not found: {datasets_root}")
         return [], []
-    names = []
-    paths = []
-    try:
-        for entry in os.listdir(datasets_root):
-            path = os.path.join(datasets_root, entry)
-            if os.path.isdir(path) and not entry.startswith('.'):
-                names.append(entry)
-                paths.append(path)
-    except Exception as e:
-        print(f"Error accessing dataset directory: {e} at {datasets_root}")
-        return [], []
-    return names, paths
+
+    all_names = []
+    all_paths = []
+
+    # iterate over first-level dirs (kaggle/, personal/, etc.)
+    for subroot in sorted(datasets_root.iterdir()):
+        if not subroot.is_dir() or subroot.name.startswith('.'):
+            continue
+
+        # iterate over datasets inside each subroot
+        for ds in sorted(subroot.iterdir()):
+            if ds.is_dir() and not ds.name.startswith('.'):
+                label = f"{subroot.name}/{ds.name}"
+                all_names.append(label)
+                all_paths.append(ds)
+
+    if not all_names:
+        print(f"[get_available_datasets] No datasets found under {datasets_root}")
+
+    return all_names, all_paths
 
 
 
 class AudioDatasetLoader:
     def __init__(self,
-                 dataset_root: Path | str,
+                 dataset_roots: list[Path] | list[str],
                  target_sr: int = 11025,
                  mono: bool = True,
                  test_size: float = 0.2,
                  duration: float | None = None):
-        self.dataset_root = dataset_root
+        self.dataset_roots = dataset_roots
         self.target_sr = target_sr
         self.mono = mono
         self.test_size = test_size
@@ -68,20 +78,21 @@ class AudioDatasetLoader:
             return y
 
     def _iter_audio(self):
-        for folder in os.listdir(self.dataset_root):
-            folder_path = os.path.join(self.dataset_root, folder)
-            if not os.path.isdir(folder_path):
-                continue
-
-            label = folder # NOTE: recent change
-
-            for fname in os.listdir(folder_path):
-                if not fname.endswith(".wav"):
+        for i in range(len(self.dataset_roots)):
+            for folder in os.listdir(self.dataset_roots[i]):
+                folder_path = os.path.join(self.dataset_roots[i], folder)
+                if not os.path.isdir(folder_path):
                     continue
-                path = os.path.join(folder_path, fname)
-                x_raw, sr = librosa.load(path, sr=self.target_sr, mono=self.mono)
-                x_raw_fixed = self.fix_len(x_raw, self.fixed_len)
-                yield x_raw_fixed, sr, label, path
+
+                label = folder # Note: recent change
+
+                for fname in os.listdir(folder_path):
+                    if not fname.endswith(".wav"):
+                        continue
+                    path = os.path.join(folder_path, fname)
+                    x_raw, sr = librosa.load(path, sr=self.target_sr, mono=self.mono)
+                    x_raw_fixed = self.fix_len(x_raw, self.fixed_len)
+                    yield x_raw_fixed, sr, label, path
 
     def load_audio_dataset(self, pad_to_max=True):
         wavs, srs, labels, paths = [], [], [], []
@@ -114,7 +125,7 @@ class MelFeatureBuilder:
     # ---------------------------------------------------------------------
     # Reports
     # ---------------------------------------------------------------------
-    def _audio_report(self, audio_loader, sample_paths: bool = False, example_limit_per_class: int = 3):
+    def _audio_report(self, audio_loader, y_encoded, reverse_map, sample_paths: bool = False, example_limit_per_class: int = 3):
         report = {}
         # Use pad_to_max=False to inspect real durations
         wavs, srs, labels, paths = audio_loader.load_audio_dataset(pad_to_max=False) # NOTE: hard reload dataset here
@@ -122,24 +133,24 @@ class MelFeatureBuilder:
         if len(wavs) > 0:
             lengths = [len(w) / sr for w, sr in zip(wavs, srs)]
 
-            report['target_sr']     = self.audio_loader.target_sr
+            report['target_sr']     = audio_loader.target_sr
             report['duration_min']  = float(np.min(lengths))
             report['duration_mean'] = float(np.mean(lengths))
             report['duration_max']  = float(np.max(lengths))
             report['unique_srs']    = sorted(list(set(srs)))
         else:
-            report['target_sr']     = self.audio_loader.target_sr
+            report['target_sr']     = audio_loader.target_sr
             report['duration_min']  = None
             report['duration_mean'] = None
             report['duration_max']  = None
             report['unique_srs']    = []
 
-        if sample_paths and self.y_encoded is not None and self.reverse_map is not None:
+        if sample_paths: # and y_encoded is not None and reverse_map is not None:
             report['example_paths'] = {}
-            classes, _ = np.unique(self.y_encoded, return_counts=True)
+            classes, _ = np.unique(y_encoded, return_counts=True)
             for c in classes:
-                idxs = np.where(self.y_encoded == c)[0][:example_limit_per_class]
-                report['example_paths'][self.reverse_map[int(c)]] = [paths[i] for i in idxs]
+                idxs = np.where(y_encoded == c)[0][:example_limit_per_class]
+                report['example_paths'][reverse_map[int(c)]] = [paths[i] for i in idxs]
 
         print("--- Audio Data Report ---")
         print(json.dumps(report, indent=4, sort_keys=True))
@@ -224,7 +235,8 @@ class MelFeatureBuilder:
         return ds
 
     def _normalize_audio_volume(self, y, eps=1e-9):
-        return y / (np.max(np.abs(y)) + eps)
+        rms = np.sqrt(np.mean(y ** 2))
+        return y / (rms + eps)
 
 
     # --- INFERENCE Functions
@@ -260,9 +272,11 @@ class MelFeatureBuilder:
                               audio_loader,
                               n_mfcc=13,
                               normalize_features: bool = False,
-                              normalize_audio_volume: bool = False
+                              normalize_audio_volume: bool = False,
+                              add_pitch_features: bool = True,
     ):
         """
+        Main extraction function for MFCC Features.
         Convert audio to MFCCs (mean pooled over time).
 
         Returns:
@@ -289,6 +303,18 @@ class MelFeatureBuilder:
             mfcc_vec = mfcc.mean(axis=1)  # shape: (n_mfcc,)
             if normalize_features:
                 mfcc_vec = (mfcc_vec - mfcc_vec.mean()) / (mfcc_vec.std() + 1e-6)
+
+            # --- TESTING: DSP pitch feature(s) --- TODO: add as config var
+            if add_pitch_features:
+                yin = YinDsp() # fmin=, fmax=
+                pitch_hz, note_info = yin.estimate_pitch(wave, audio_loader.target_sr)
+
+                if pitch_hz is not None:
+                    pitch_feat = float(np.log10(pitch_hz))
+                    #midi_feat = float(np.log10(note_info["midi_float"]) if note_info["midi_float"] is not None else 0.0)
+                    dsp_feats = np.array([pitch_feat], dtype=np.float32) # [pitch_feat], [,midi_feat], [pitch_feat, midi_feat]
+                    mfcc_vec = np.concatenate((mfcc_vec, dsp_feats), axis=0)
+
             X.append(mfcc_vec)
 
         X = np.vstack(X)                      # shape: (n_samples, n_mfcc)
@@ -524,6 +550,10 @@ class MelFeatureBuilder:
 
         return dl_tr, dl_val, X, y_encoded, num_classes, reverse_map
 
+
+
+
+'''
     def build_train_val_dataloaders(
             self,
             X, y_encoded,
@@ -575,3 +605,4 @@ class MelFeatureBuilder:
         )
 
         return dl_tr, dl_val, scaler
+'''

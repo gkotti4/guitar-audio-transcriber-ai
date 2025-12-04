@@ -58,13 +58,13 @@ class TrainingManager:
         # config
         self._print_config(cfg)
 
-        # dataset
+        # dataset(s)
         selected_dataset_path = self._choose_dataset(cfg.DATASETS_ROOT)
         last_time = time.time()
 
         # build audio loader
         audio_dataset_loader = AudioDatasetLoader(
-            selected_dataset_path,
+            [selected_dataset_path],
             target_sr=cfg.TARGET_SR,
         )
 
@@ -166,7 +166,7 @@ class TrainingManager:
 
         # build audio loader
         audio_dataset_loader = AudioDatasetLoader(
-            selected_dataset_path,
+            [selected_dataset_path],
             target_sr=cfg.TARGET_SR,
         )
 
@@ -250,7 +250,11 @@ class TrainingManager:
 
     def train_all(self):
         stime = time.time()
+        print("\t--- MLP ---")
         self.train_mlp()
+        if input("Hit enter to continue or hit any key to exit: ") != "":
+            return
+        print("\t--- CNN ---")
         self.train_cnn()
         print(f"[train_all] Total training time: {time.time() - stime:.2f}s\n")
 

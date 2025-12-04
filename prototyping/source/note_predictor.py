@@ -6,13 +6,14 @@ from trainers.mlp_trainer import *
 from trainers.cnn_trainer import *
 import numpy as np
 import torch
+import dsp_algorithms.yin
 
 
 
 class NotePredictor:
     def __init__(self, device=None):
 
-        self.device = torch.device("cpu") #torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
+        self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
 
         self.mlp = None
         self.cnn = None
@@ -21,8 +22,9 @@ class NotePredictor:
 
         self.configs = {"mlp_config":None, "cnn_config":None}
 
-        self.cnn_weight = 0.95
+        self.cnn_weight = 0.60
         self.mlp_weight = (1.0 - self.cnn_weight)
+        # yin/dsp weight?
 
 
     # - MODELS
@@ -140,6 +142,7 @@ class NotePredictor:
         pred_indices = np.argmax(probs, axis=1)
         pred_labels = [self.reverse_map[int(i)] for i in pred_indices]
         confidences = probs[np.arange(len(pred_indices)), pred_indices]
+
 
         return {
             "indices": pred_indices,

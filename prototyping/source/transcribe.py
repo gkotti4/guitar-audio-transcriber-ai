@@ -9,6 +9,7 @@ from tkinter import filedialog, messagebox
 from config import *
 from audio_processing.audio_preprocessing import AudioDatasetLoader, MelFeatureBuilder, get_available_datasets
 from audio_processing.audio_slicer import AudioSlicer
+from dsp_algorithms.yin import YinDsp
 from note_predictor import NotePredictor
 
 import torch
@@ -39,6 +40,9 @@ class Transcriber():
 
         self.predictor.load_models(self.mlp_ckpt_data, self.cnn_ckpt_data)
 
+        # New - define config for slicer data
+        self.slicer_cfg = AudioSlicerConfig()
+
 
     def load_model_data(
             self,
@@ -64,15 +68,18 @@ class Transcriber():
         #self.model_configs["cnn"] = self.cnn_ckpt_data["config"]
 
 
-    def transcribe(self, audio_path: Path, out_root: Path, audio_name="audio", clip_target_sr=44100, clip_len=0.5):
+    def transcribe(self, audio_path: Path, out_root: Path, audio_name="audio", target_sr=11025, clip_len=0.5):
         timestamp = datetime.now().strftime("%m-%d_%H-%M-%S")
-        out_dir = out_root / f"{audio_name}_{timestamp}"
+        loader_root = out_root / f"{audio_name}_{timestamp}" # needed for audio loader - simulated database
+        out_dir = loader_root / f"{audio_name}"
+        os.makedirs(out_dir, exist_ok=True)
 
         # slice audio to clips
-        self.slicer.sliceNsave(audio_path, out_dir, clip_target_sr, length_sec=clip_len)
+        self.slicer.sliceNsave(audio_path, out_dir, target_sr, length_sec=clip_len,
+                               hop_len=self.slicer_cfg.HOP_LEN, min_sep=self.slicer_cfg.MIN_SEP, min_db_threshold=self.slicer_cfg.MIN_IN_DB_THRESHOLD, min_slice_rms_db=self.slicer_cfg.MIN_SLICE_RMS_DB)
 
         # load clips in database format
-        audio_loader = AudioDatasetLoader(out_root, target_sr=clip_target_sr, duration=clip_len)
+        audio_loader = AudioDatasetLoader([loader_root], target_sr=target_sr, duration=clip_len)
 
         # convert to features using the same preprocessing as trained models
         mfcc_features, melspec_features = self.feature_builder.extract_inference_features(audio_loader, self.model_configs["mlp"], self.model_configs["cnn"], self.mlp_ckpt_data["scaler"])
@@ -83,6 +90,13 @@ class Transcriber():
         # map to TAB
         # - - - - - -
 
+        # DSP TESTING
+        prediction["yin_info"] = []
+        wavs, _, _, _ = audio_loader.load_audio_dataset()
+        yin = YinDsp()
+        for wav in wavs:
+            pitch_hz, note_info = yin.estimate_pitch(wav, audio_loader.target_sr)
+            prediction["yin_info"].append((pitch_hz, note_info))
 
         return prediction
 
@@ -112,10 +126,11 @@ def main():
     audio_name = in_audio_path.stem
 
     transcriber = Transcriber()
-    prediction = transcriber.transcribe(in_audio_path, out_audio_root, audio_name, clip_target_sr=11025, clip_len=0.5)
+    prediction = transcriber.transcribe(in_audio_path, out_audio_root, audio_name, target_sr=base_cfg.TARGET_SR, clip_len=base_cfg.CLIP_LENGTH) # use config here?
 
-    print(" ".join(str(x[:4]) for x in prediction["labels"]))
+    print(" ".join(str(x) for x in prediction["labels"]))
     print(" ".join(f"{x:.2f}" for x in prediction["confidences"]))
+    pprint(prediction["yin_info"])
 
     print("\nTranscriber finished.\n")
 
