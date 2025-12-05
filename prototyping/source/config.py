@@ -2,7 +2,6 @@ import os, time
 from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass
-#from tools.recording_slicer.recording_slicer import PROJECT_ROOT
 
 
 # **RULE**: Functions should NEVER create or own config values. (TODO)
@@ -54,7 +53,7 @@ class MLPConfig(MFCCConfig):
     CHECKPOINTS_DIR: Path = BaseConfig.CHECKPOINTS_ROOT / "mlp"
 
     SAVE_CHECKPOINT: bool        = True
-    LOAD_CHECKPOINT: bool        = False  # DEPRECIATING
+    #LOAD_CHECKPOINT: bool        = False  # DEPRECIATING
 
     HIDDEN_DIM: int              = 128
     NUM_HIDDEN_LAYERS: int       = 2
@@ -65,7 +64,7 @@ class MLPConfig(MFCCConfig):
 
     EPOCHS: int                  = 40
     MAX_CLIP_NORM: float         = 1.0
-    ES_WINDOW_LEN: int           = 10
+    ES_WINDOW_LEN: int           = 5
     ES_SLOPE_LIMIT: float        = -0.0001
 
 
@@ -74,20 +73,21 @@ class CNNConfig(MelSpecConfig):
     CHECKPOINTS_DIR: Path = BaseConfig.CHECKPOINTS_ROOT / "cnn"
 
     SAVE_CHECKPOINT: bool        = True
-    LOAD_CHECKPOINT: bool        = False  # DEPRECIATING
+    #LOAD_CHECKPOINT: bool        = False  # DEPRECIATING
 
     BASE_CHANNELS: int           = 32
     NUM_BLOCKS: int              = 3
+    KERNEL_SIZE: int             = 3
     HIDDEN_DIM: int              = 256
     DROPOUT: float               = 0.1
-    KERNEL_SIZE: int             = 3
+
 
     LR: float                    = 1e-3
     DECAY: float                 = 1e-4
 
     EPOCHS: int                  = 30
     MAX_CLIP_NORM: float         = 1.0
-    ES_WINDOW_LEN: int           = 4
+    ES_WINDOW_LEN: int           = 3
     ES_SLOPE_LIMIT: float        = -0.0001
     USE_AMP: bool                = True
 
@@ -97,11 +97,11 @@ class AudioSlicerConfig(BaseConfig):
     AUDIO_NAME: str = "E2_Only" # refactor
     TIME_STAMP: str = str(datetime.now().strftime("%m-%d_%H-%M-%S"))
 
-    IN_AUDIO_ROOT: Path = BaseConfig.PROJECT_ROOT / "data" / "inference" / "guitar_audio" # factor out
-    IN_AUDIO_PATH: Path = IN_AUDIO_ROOT / AUDIO_NAME / f"{AUDIO_NAME}.wav"  # factor out
+    #IN_AUDIO_ROOT: Path = BaseConfig.PROJECT_ROOT / "data" / "inference" / "guitar_audio" # factor out
+    #IN_AUDIO_PATH: Path = IN_AUDIO_ROOT / AUDIO_NAME / f"{AUDIO_NAME}.wav"  # factor out
 
-    OUT_CLIPS_ROOT: Path = BaseConfig.PROJECT_ROOT / "data" / "inference" / "guitar_note_clips"
-    OUT_CLIPS_DIR: Path = OUT_CLIPS_ROOT / AUDIO_NAME / TIME_STAMP  # out Clip folder
+    #OUT_CLIPS_ROOT: Path = BaseConfig.PROJECT_ROOT / "data" / "inference" / "guitar_note_clips"
+    #OUT_CLIPS_DIR: Path = OUT_CLIPS_ROOT / AUDIO_NAME / TIME_STAMP  # out Clip folder
 
     MIN_IN_DB_THRESHOLD: float = -35 #-45.0
     MIN_SLICE_RMS_DB: float = -30.0 #-37.5

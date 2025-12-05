@@ -172,7 +172,7 @@ class AudioSlicer:
             print(f"[sliceNsave] saved clip from: {times[0]:.3f}s to {times[1]:.3f}s")
         print(f"[sliceNsave] total clips saved: {total}")
         print(f"audio sr: {sr}")
-        return len(onsets)
+        return onsets
 
 
 

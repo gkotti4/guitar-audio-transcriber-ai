@@ -127,13 +127,6 @@ class TrainingManager:
         print(f"Full setup time: {time.time() - start_time:.2f}s\n")
         last_time = time.time()
 
-        # load
-        if cfg.LOAD_CHECKPOINT:
-            try:
-                trainer.load()
-            except Exception as e:
-                print("Failed to load checkpoint: ", e)
-
         # train
         trainer.train(
             epochs=cfg.EPOCHS,

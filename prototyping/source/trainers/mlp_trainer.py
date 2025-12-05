@@ -48,7 +48,7 @@ class MLP(nn.Module):
         dims: list[int] = [hidden_dim]
         for _ in range(num_hidden_layers - 1):
             next_dim = dims[-1] // 2
-            if next_dim < 2:     # stop if it gets too small
+            if next_dim < 8: #2:     # stop if it gets too small
                 break
             dims.append(next_dim)
 
@@ -120,9 +120,16 @@ class MLPTrainer():
 
         self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
         self.model = model.to(self.device)
-        self.model.apply(self._init_weights_kaiming) # new
+        self.model.apply(self._init_weights_kaiming)
+        self.loss_fn = nn.CrossEntropyLoss(label_smoothing=0.05) # + label_smoothing (12/5)
         self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=weight_decay)
-        self.loss_fn = nn.CrossEntropyLoss()
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer,
+            mode='min',
+            factor=0.5,
+            patience=3,
+            threshold=1e-4,
+        )                           # + (12/5)
 
         self.scaler = scaler
 
@@ -336,7 +343,9 @@ class MLPTrainer():
 
             # ---- early stop (es) val loss/acc ----
             val_acc, val_loss = self.evaluate()
-            if ep > es_window_len + es_window_len/2:
+            if self.scheduler is not None:
+                self.scheduler.step(val_loss)
+            elif ep > es_window_len + es_window_len/2: # TODO: use with new scheduler?
                 last_accs = self.val_accuracy_history[-es_window_len:]        if len(self.val_accuracy_history) >= es_window_len     else np.array([])
                 last_losses = self.val_loss_history[-es_window_len:]    if len(self.val_loss_history) >= es_window_len   else np.array([])
 

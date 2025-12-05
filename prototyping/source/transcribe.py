@@ -91,12 +91,12 @@ class Transcriber():
         # - - - - - -
 
         # DSP TESTING
-        prediction["yin_info"] = []
+        prediction["dsp_info"] = []
         wavs, _, _, _ = audio_loader.load_audio_dataset()
         yin = YinDsp()
         for wav in wavs:
             pitch_hz, note_info = yin.estimate_pitch(wav, audio_loader.target_sr)
-            prediction["yin_info"].append((pitch_hz, note_info))
+            prediction["dsp_info"].append((pitch_hz, note_info))
 
         return prediction
 
@@ -130,7 +130,7 @@ def main():
 
     print(" ".join(str(x) for x in prediction["labels"]))
     print(" ".join(f"{x:.2f}" for x in prediction["confidences"]))
-    pprint(prediction["yin_info"])
+    print(" ".join(f"{x[1]["midi"], x[1]["note_name"]}" for x in prediction["dsp_info"]))
 
     print("\nTranscriber finished.\n")
 
