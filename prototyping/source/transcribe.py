@@ -105,11 +105,6 @@ class Transcriber():
 def main():
     base_cfg = BaseConfig()
 
-    # temporary
-    audio_name = "E2_Only"
-    in_audio_path = base_cfg.INFERENCE_AUDIO_ROOT / f"{audio_name}.wav"
-    out_audio_root = base_cfg.INFERENCE_CLIPS_ROOT / "Transcriber"
-
     # minimal TK root (hidden)
     root = tk.Tk()
     root.withdraw()
@@ -124,6 +119,7 @@ def main():
 
     in_audio_path = Path(file_path)
     audio_name = in_audio_path.stem
+    out_audio_root = base_cfg.INFERENCE_CLIPS_ROOT / "Transcriber"
 
     transcriber = Transcriber()
     prediction = transcriber.transcribe(in_audio_path, out_audio_root, audio_name, target_sr=base_cfg.TARGET_SR, clip_len=base_cfg.CLIP_LENGTH) # use config here?
@@ -131,6 +127,9 @@ def main():
     print(" ".join(str(x) for x in prediction["labels"]))
     print(" ".join(f"{x:.2f}" for x in prediction["confidences"]))
     print(" ".join(f"{x[1]["midi"], x[1]["note_name"]}" for x in prediction["dsp_info"]))
+
+    for (x, m) in zip(prediction["labels"], prediction["dsp_info"]):
+        print(x, m[1]["note_name"])
 
     print("\nTranscriber finished.\n")
 

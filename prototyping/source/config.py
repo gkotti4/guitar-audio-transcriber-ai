@@ -62,10 +62,10 @@ class MLPConfig(MFCCConfig):
     LR: float                    = 1e-3
     DECAY: float                 = 1e-4
 
-    EPOCHS: int                  = 40
+    EPOCHS: int                  = 10#30
     MAX_CLIP_NORM: float         = 1.0
-    ES_WINDOW_LEN: int           = 5
-    ES_SLOPE_LIMIT: float        = -0.0001
+    ES_WINDOW_LEN: int           = 4
+    ES_SLOPE_LIMIT: float        = -0.00015
 
 
 @dataclass
@@ -85,23 +85,16 @@ class CNNConfig(MelSpecConfig):
     LR: float                    = 1e-3
     DECAY: float                 = 1e-4
 
-    EPOCHS: int                  = 30
+    EPOCHS: int                  = 3#30
     MAX_CLIP_NORM: float         = 1.0
-    ES_WINDOW_LEN: int           = 3
-    ES_SLOPE_LIMIT: float        = -0.0001
+    ES_WINDOW_LEN: int           = 4
+    ES_SLOPE_LIMIT: float        = -0.00015
     USE_AMP: bool                = True
 
 
 @dataclass
 class AudioSlicerConfig(BaseConfig):
-    AUDIO_NAME: str = "E2_Only" # refactor
     TIME_STAMP: str = str(datetime.now().strftime("%m-%d_%H-%M-%S"))
-
-    #IN_AUDIO_ROOT: Path = BaseConfig.PROJECT_ROOT / "data" / "inference" / "guitar_audio" # factor out
-    #IN_AUDIO_PATH: Path = IN_AUDIO_ROOT / AUDIO_NAME / f"{AUDIO_NAME}.wav"  # factor out
-
-    #OUT_CLIPS_ROOT: Path = BaseConfig.PROJECT_ROOT / "data" / "inference" / "guitar_note_clips"
-    #OUT_CLIPS_DIR: Path = OUT_CLIPS_ROOT / AUDIO_NAME / TIME_STAMP  # out Clip folder
 
     MIN_IN_DB_THRESHOLD: float = -35 #-45.0
     MIN_SLICE_RMS_DB: float = -30.0 #-37.5

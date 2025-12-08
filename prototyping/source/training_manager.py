@@ -53,7 +53,7 @@ class TrainingManager:
     # ---------- MLP training ----------
     def train_mlp(self):
         start_time = time.time()
-        cfg = self.mlp_cfg
+        cfg = self.mlp_cfg if self.mlp_cfg is not None else MLPConfig()
 
         # config
         self._print_config(cfg)
@@ -148,7 +148,7 @@ class TrainingManager:
     # ---------- CNN training ----------
     def train_cnn(self):
         start_time = time.time()
-        cfg = self.cnn_cfg
+        cfg = self.cnn_cfg if self.cnn_cfg is not None else CNNConfig()
 
         # config
         self._print_config(cfg)

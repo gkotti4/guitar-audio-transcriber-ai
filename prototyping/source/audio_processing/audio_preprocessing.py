@@ -48,7 +48,8 @@ class AudioDatasetLoader:
                  target_sr: int = 11025,
                  mono: bool = True,
                  test_size: float = 0.2,
-                 duration: float | None = None):
+                 duration: float | None = None
+    ):
         self.dataset_roots = dataset_roots
         self.target_sr = target_sr
         self.mono = mono

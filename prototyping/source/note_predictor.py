@@ -22,7 +22,7 @@ class NotePredictor:
 
         self.configs = {"mlp_config":None, "cnn_config":None}
 
-        self.cnn_weight = 0.60  # try multiple predictions at once and compare {x, x, x}
+        self.cnn_weight = 0.75  # try multiple predictions at once and compare {x, x, x}
         self.mlp_weight = (1.0 - self.cnn_weight)
         # yin/dsp weight?
 
