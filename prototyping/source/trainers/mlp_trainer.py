@@ -432,7 +432,7 @@ class MLPTrainer():
         #print(f"[evaluate] val accuracy: {acc:.4f}, val loss: {avg_loss:.4f}")
         return acc, avg_loss
 
-    def save(self, filename="mlp_ckpt.ckpt", root="checkpoints/mlp/", config=None):
+    def save(self, filename="mlp_ckpt.ckpt", root=Path.cwd() / "checkpoints" / "mlp", config=None):
         """Used in recreating models, processing new data (same pipeline values), metrics"""
 
         if config is None:
@@ -440,7 +440,7 @@ class MLPTrainer():
             config = MLPConfig()
 
         os.makedirs(root, exist_ok=True)
-        save_path = os.path.join(root, filename)
+        save_path = root / filename
 
         ckpt = {
             "config": config,

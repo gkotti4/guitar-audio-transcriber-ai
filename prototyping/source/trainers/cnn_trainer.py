@@ -461,13 +461,13 @@ class CNNTrainer():
         #print(f"[evaluate] val accuracy: {acc:.4f}, val loss: {avg_loss:.4f}")
         return acc, avg_loss
     
-    def save(self, filename = "cnn_ckpt.ckpt", root = "checkpoints/cnn/", config = None):
+    def save(self, filename = "cnn_ckpt.ckpt", root = Path.cwd() / "checkpoints" / "cnn", config = None):
         if config is None:
             print("[save] Warning. No config provided - using default config.")
             config = CNNConfig()
 
         os.makedirs(root, exist_ok=True)
-        save_path = os.path.join(root, filename)
+        save_path = root / filename #os.path.join(root, filename)
 
         ckpt = {
             "config": config,

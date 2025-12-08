@@ -239,7 +239,7 @@ class TrainingManager:
         print(f"Training time: {time.time() - last_time:.2f}s\n")
 
 
-    # --- TODO: Implement Generalized train_model(model_type) Method
+    # --- TODO: Implement Generalized train_model(model_type) Method (only load dataset once!)
 
     def train_all(self):
         stime = time.time()
