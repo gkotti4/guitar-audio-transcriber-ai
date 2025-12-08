@@ -1,3 +1,4 @@
+# audio_preprocessing.py
 import os, json
 from dataclasses import dataclass
 import librosa
@@ -243,26 +244,30 @@ class MelFeatureBuilder:
     # --- INFERENCE Functions
     def extract_inference_features(self,
                                    audio_loader: AudioDatasetLoader,
-                                   mlp_config: MLPConfig,
-                                   cnn_config: CNNConfig,
+                                   mfcc_config: MFCCConfig = None,
+                                   melspec_config: MelSpecConfig = None,
                                    scaler: StandardScaler = None
     ):
 
+        if mfcc_config is None:
+            mfcc_config = asdict(MFCCConfig())
         mfcc_features,_,_,_ = self.extract_mfcc_features(
             audio_loader,
-            mlp_config.N_MFCC,
-            mlp_config.NORMALIZE_FEATURES,
-            mlp_config.NORMALIZE_AUDIO_VOLUME
+            mfcc_config["N_MFCC"],
+            False, # mfcc_config.NORMALIZE_FEATURES, # depreciated
+            mfcc_config["NORMALIZE_AUDIO_VOLUME"]
         )
         if scaler: # or if mlp_config.STANDARD_SCALER
             mfcc_features = scaler.transform(mfcc_features)
 
+        if melspec_config is None:
+            melspec_config = asdict(MelSpecConfig())
         melspec_features,_,_,_ = self.extract_melspec_features(
             audio_loader,
-            cnn_config.N_MELS,
-            cnn_config.N_FFT,
-            cnn_config.HOP_LENGTH,
-            cnn_config.NORMALIZE_AUDIO_VOLUME
+            melspec_config["N_MELS"],
+            melspec_config["N_FFT"],
+            melspec_config["HOP_LENGTH"],
+            melspec_config["NORMALIZE_AUDIO_VOLUME"]
         )
 
         return mfcc_features, melspec_features

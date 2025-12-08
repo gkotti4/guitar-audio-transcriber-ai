@@ -1,8 +1,9 @@
+# mlp_trainer.py
 import os, time, json
 from datetime import datetime
 from pathlib import Path
 from pprint import pprint
-from dataclasses import asdict
+from dataclasses import dataclass, asdict
 
 import math
 import numpy as np
@@ -283,7 +284,6 @@ class MLPTrainer():
         print(bar)
 
     def train(self, epochs=20, train_dl=None, es_window_len=4, es_slope_limit=1e-5, max_clip_norm=1.0, plot_metrics=False):
-
         train_dl = train_dl or self.train_dl
         if not train_dl:
             print("[train] No train dataloader provided. Exiting [train].")
@@ -382,7 +382,6 @@ class MLPTrainer():
         print("\n[train] Training complete.\n")
 
     def predict(self, xb):
-
         self.model.eval()
         with torch.no_grad():
             xb = xb.to(self.device)
@@ -391,7 +390,6 @@ class MLPTrainer():
             return preds
 
     def evaluate(self, val_dl=None, cm=False, report=False, plot_metrics=False): # TODO: re-implement cm, report, show_metrics
-
         dl = val_dl or self.val_dl
         if not dl:
             print(f"[evaluate] No val dataloader provided.")
@@ -432,18 +430,35 @@ class MLPTrainer():
         #print(f"[evaluate] val accuracy: {acc:.4f}, val loss: {avg_loss:.4f}")
         return acc, avg_loss
 
-    def save(self, filename="mlp_ckpt.ckpt", root=Path.cwd() / "checkpoints" / "mlp", config=None):
+    def save(self, filename=MLP_CONFIG.DEFAULT_CKPT_NAME, root=MLP_CONFIG.CHECKPOINTS_DIR): #, mlp_config=None, mfcc_config=None):
         """Used in recreating models, processing new data (same pipeline values), metrics"""
 
-        if config is None:
-            print("[save] Warning. No config provided - using default config.")
-            config = MLPConfig()
+        #if config is None: # changed: 12-8-25
+        #    print("[save] Warning. No config provided - using default config.")
+        #    config = MLPConfig()
 
-        os.makedirs(root, exist_ok=True)
+        root = Path(root)
+        root.mkdir(parents=True, exist_ok=True) #os.makedirs(root, exist_ok=True)
         save_path = root / filename
 
         ckpt = {
-            "config": config,
+            "meta": {
+                "config_version": CONFIG_VERSION,
+                "datetime": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+                "model_type": "mlp",
+            },
+            "config": {
+                "features": {
+                    "type": "mfcc",
+                    "params": asdict(MFCC_CONFIG),
+                },
+                "model": {
+                    "type": "mlp",
+                    "params": asdict(MLP_CONFIG),
+                },
+                "target_sr": TARGET_SR,
+                "clip_length": CLIP_LENGTH,
+            },
             "model": self.model.state_dict(),
             "model_init_args": self.model.init_args,
             "optimizer": self.optimizer.state_dict(),            
@@ -463,7 +478,7 @@ class MLPTrainer():
 
         print(f"[save] Checkpoint saved to {save_path}")
 
-    def load(self, filename="mlp_ckpt.ckpt", root="checkpoints/mlp/"):  # DEPRECIATING
+    def load(self, filename=MLP_CONFIG.DEFAULT_CKPT_NAME, root=MLP_CONFIG.CHECKPOINTS_DIR):  # DEPRECIATING
         """NOTE: must be initialized with same train/val dl which was saved on"""
         if not os.path.isdir(root):
             raise FileNotFoundError(f"[load] No directory named: {root}")

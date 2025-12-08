@@ -1,7 +1,10 @@
+# transcribe_cli.py
+from config import TARGET_SR, CLIP_LENGTH, INFERENCE_OUTPUT_ROOT
 from transcribe import Transcriber
 import os, argparse
 import tempfile
 from pathlib import Path
+from pprint import pprint, pformat
 
 import tkinter as tk
 from tkinter import filedialog, messagebox
@@ -49,7 +52,7 @@ def main():
 
     # --- Resolve output directory (for transcription text) ---
     if args.out is None:
-        out_dir = Path(__file__).parent / "output"
+        out_dir = INFERENCE_OUTPUT_ROOT
     else:
         out_dir = Path(args.out)
 
@@ -72,8 +75,8 @@ def main():
             audio_path=audio_path,
             out_root=tmpdir,              # where slices+dataset live
             audio_name=audio_path.stem,
-            target_sr=11025,
-            clip_len=0.5,
+            target_sr=TARGET_SR,
+            clip_len=CLIP_LENGTH,
         )
 
     labels = result["labels"]
@@ -82,14 +85,13 @@ def main():
     # --- Print to console ---
     for i, (lab, conf) in enumerate(zip(labels, confs)):
         print(f"{i:03d}  {lab:>4}  (conf={conf:.2f})")
-
     # --- Save to text file ---
     if not console_only:
         with out_file.open("w", encoding="utf-8") as f:
             for i, (lab, conf) in enumerate(zip(labels, confs)):
                 f.write(f"{i},{lab},{conf:.4f}\n")
             f.write("\nFull result dict:\n")
-            f.write(str(result))
+            f.write(pformat(result))
 
     print(f"\nSaved transcription to {out_file}")
 

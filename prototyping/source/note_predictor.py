@@ -1,3 +1,4 @@
+# note_predictor.py
 import os, time
 from pathlib import Path
 from config import *
@@ -19,8 +20,6 @@ class NotePredictor:
         self.cnn = None
 
         self.reverse_map = None
-
-        self.configs = {"mlp_config":None, "cnn_config":None}
 
         self.cnn_weight = 0.75  # try multiple predictions at once and compare {x, x, x}
         self.mlp_weight = (1.0 - self.cnn_weight)
@@ -63,9 +62,9 @@ class NotePredictor:
                     print("[load_models] Loaded reverse_map from MLP checkpoint.")
 
             # assign config
-            self.configs["mlp_config"] = mlp_ckpt_data["config"]
-            if self.configs["mlp_config"] is not None:
-                print("[load_models] Loaded MLP config")
+            #self.configs["mlp_config"] = mlp_ckpt_data["config"]
+            #if self.configs["mlp_config"] is not None:
+            #    print("[load_models] Loaded MLP config")
 
 
         # ---- Load CNN checkpoint ----
@@ -89,9 +88,9 @@ class NotePredictor:
             print(f"[load_models] Loaded CNN model")
 
             # assign config
-            self.configs["cnn_config"] = cnn_ckpt_data["config"]
-            if self.configs["cnn_config"] is not None:
-                print("[load_models] Loaded CNN config")
+            #self.configs["cnn_config"] = cnn_ckpt_data["config"]
+            #if self.configs["cnn_config"] is not None:
+            #    print("[load_models] Loaded CNN config")
 
 
         # ---- Final output ----

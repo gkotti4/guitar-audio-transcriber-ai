@@ -1,7 +1,10 @@
+# transcribe.py
 import os, time, argparse
 from pathlib import Path
 from datetime import datetime
 from pprint import pprint
+
+import tempfile
 
 import tkinter as tk
 from tkinter import filedialog, messagebox
@@ -17,80 +20,124 @@ import numpy as np
 
 
 
-class Transcriber():
-    def __init__(self):
+class Transcriber:
+    def __init__(
+        self,
+        mlp_ckpt: Path | str | None = None,
+        cnn_ckpt: Path | str | None = None,
+        mlp_root: Path | str | None = None,
+        cnn_root: Path | str | None = None,
+        device: str = "cpu",
+    ):
+        self.device = torch.device(device)
 
-        self.device = torch.device("cpu") #torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.slicer = AudioSlicer()
         self.feature_builder = MelFeatureBuilder()
-        self.predictor = NotePredictor()
+        self.predictor = NotePredictor(device=self.device)
 
-        self.mlp_ckpt_data = None
-        self.cnn_ckpt_data = None
-        self.model_configs = {"mlp": None, "cnn": None}
+        # ----- Resolve checkpoint paths -----
+        mlp_root = Path(mlp_root) if mlp_root else MLP_CONFIG.CHECKPOINTS_DIR
+        cnn_root = Path(cnn_root) if cnn_root else CNN_CONFIG.CHECKPOINTS_DIR
 
-        self.load_model_data()
-        if self.mlp_ckpt_data is None or self.cnn_ckpt_data is None:
-            raise ValueError("[Transcriber] No MLP or CNN checkpoint found. load_model_data() unsuccessful.")
+        mlp_name = Path(mlp_ckpt) if mlp_ckpt else Path(MLP_CONFIG.DEFAULT_CKPT_NAME)
+        cnn_name = Path(cnn_ckpt) if cnn_ckpt else Path(CNN_CONFIG.DEFAULT_CKPT_NAME)
 
-        self.model_configs["mlp"] = self.mlp_ckpt_data["config"]
-        self.model_configs["cnn"] = self.cnn_ckpt_data["config"]
-        if self.model_configs["mlp"] is None or self.model_configs["cnn"] is None:
-            raise ValueError("[Transcriber] No MLP or CNN config found.")
+        mlp_path = mlp_root / mlp_name
+        cnn_path = cnn_root / cnn_name
 
-        self.predictor.load_models(self.mlp_ckpt_data, self.cnn_ckpt_data)
+        # ----- Load checkpoints -----
+        if not mlp_path.is_file():
+            raise FileNotFoundError(f"[Transcriber] Missing MLP checkpoint: {mlp_path}")
 
-        # New - define config for slicer data
-        self.slicer_cfg = AudioSlicerConfig()
+        if not cnn_path.is_file():
+            raise FileNotFoundError(f"[Transcriber] Missing CNN checkpoint: {cnn_path}")
 
+        self.model_ckpts = {
+            "mlp": torch.load(mlp_path, map_location=self.device, weights_only=False),
+            "cnn": torch.load(cnn_path, map_location=self.device, weights_only=False),
+        }
 
-    def load_model_data(
-            self,
-            mlp_ckpt: Path | str = "mlp_ckpt.ckpt",
-            cnn_ckpt: Path | str = "cnn_ckpt.ckpt",
-            mlp_root: Path | str = "trainers/checkpoints/mlp/",
-            cnn_root: Path | str = "trainers/checkpoints/cnn/"
-    ):
-        # ---- Load MLP checkpoint ----
-        mlp_path = os.path.join(mlp_root, mlp_ckpt)
-        if not os.path.isfile(mlp_path):
-            raise FileNotFoundError(f"[load_models] No MLP checkpoint found: {mlp_path}")
+        # ----- Extract model configs from checkpoints -----
+        self.model_configs = {
+            "mlp": self.model_ckpts["mlp"].get("config"),
+            "cnn": self.model_ckpts["cnn"].get("config"),
+        }
 
-        self.mlp_ckpt_data = torch.load(mlp_path, map_location="cpu", weights_only=False)
-        #self.model_configs["mlp"] = self.mlp_ckpt_data["config"]
+        if not self.model_configs["mlp"] or not self.model_configs["cnn"]:
+            raise ValueError("[Transcriber] Checkpoints missing 'config' field.")
 
-        # ---- Load CNN checkpoint ----
-        cnn_path = os.path.join(cnn_root, cnn_ckpt)
-        if not os.path.isfile(cnn_path):
-            raise FileNotFoundError(f"[load_models] No MLP checkpoint found: {mlp_path}")
+        # ----- Initialize predictor models -----
+        self.predictor.load_models(
+            self.model_ckpts["mlp"],
+            self.model_ckpts["cnn"],
+        )
 
-        self.cnn_ckpt_data = torch.load(cnn_path, map_location="cpu", weights_only=False)
-        #self.model_configs["cnn"] = self.cnn_ckpt_data["config"]
+    def transcribe(
+        self,
+        audio_path: Path | str,
+        out_root: Path | str = INFERENCE_OUTPUT_ROOT,
+        audio_name: str = "transcribe_audio",
+        target_sr: int = TARGET_SR,
+        clip_len: float = CLIP_LENGTH,
+        #save_clips_to_disk: bool = False,
+    ) -> dict:
+        """
+        Run full transcription on a single audio file.
+        Returns:
+            prediction dict from NotePredictor, plus optional DSP info.
+        """
 
+        audio_path = Path(audio_path)
+        out_root = Path(out_root)
 
-    def transcribe(self, audio_path: Path, out_root: Path, audio_name="audio", target_sr=11025, clip_len=0.5):
         timestamp = datetime.now().strftime("%m-%d_%H-%M-%S")
-        loader_root = out_root / f"{audio_name}_{timestamp}" # needed for audio loader - simulated database
-        out_dir = loader_root / f"{audio_name}"
-        os.makedirs(out_dir, exist_ok=True)
 
-        # slice audio to clips
-        self.slicer.sliceNsave(audio_path, out_dir, target_sr, length_sec=clip_len,
-                               hop_len=self.slicer_cfg.HOP_LEN, min_sep=self.slicer_cfg.MIN_SEP, min_db_threshold=self.slicer_cfg.MIN_IN_DB_THRESHOLD, min_slice_rms_db=self.slicer_cfg.MIN_SLICE_RMS_DB)
+        # CHANGE 5: still simulate a "database" directory, but using Path cleanly
+        loader_root = out_root / f"{audio_name}_{timestamp}"  # used by AudioDatasetLoader
+        out_dir = loader_root / audio_name
+        out_dir.mkdir(exist_ok=True, parents=True)
 
-        # load clips in database format
-        audio_loader = AudioDatasetLoader([loader_root], target_sr=target_sr, duration=clip_len)
+        # ---- 1. Slice audio into clips ----
+        # CHANGE 6: use SLICER_CONFIG pulled from central config
+        self.slicer.sliceNsave(
+            audio_path,
+            out_dir,
+            target_sr,
+            length_sec=clip_len,
+            hop_len=SLICER_CONFIG.HOP_LEN,
+            min_sep=SLICER_CONFIG.MIN_SEP,
+            min_db_threshold=SLICER_CONFIG.MIN_IN_DB_THRESHOLD,
+            min_slice_rms_db=SLICER_CONFIG.MIN_SLICE_RMS_DB,
+        )
 
-        # convert to features using the same preprocessing as trained models
-        mfcc_features, melspec_features = self.feature_builder.extract_inference_features(audio_loader, self.model_configs["mlp"], self.model_configs["cnn"], self.mlp_ckpt_data["scaler"])
+        # ---- 2. Load clips via AudioDatasetLoader ----
+        if self.model_configs["mlp"]["target_sr"] != self.model_configs["cnn"]["target_sr"]:
+            raise ValueError("[Transcriber] Target SR mismatch.")
 
-        # predict to note labels
+        target_sr = self.model_configs["mlp"]["target_sr"]
+        audio_loader = AudioDatasetLoader(
+            [loader_root],
+            target_sr=target_sr,
+            duration=clip_len,
+        )
+
+        # ---- 3. Extract features using *checkpoint* configs ----
+        # NOTE: self.model_configs["mlp"] / ["cnn"] are whatever trainer saved under `"config"`.
+        # If moved to the "features/model/params" schema, adapt this call accordingly.
+        mfcc_features, melspec_features = self.feature_builder.extract_inference_features(
+            audio_loader,
+            self.model_configs["mlp"]["features"]["params"],
+            self.model_configs["cnn"]["features"]["params"],
+            self.model_ckpts["mlp"].get("scaler"),  # CHANGE 7: read scaler from ckpt dict consistently
+        )
+
+        # ---- 4. Predict note labels ----
         prediction = self.predictor.predict(mfcc_features, melspec_features)
 
-        # map to TAB
-        # - - - - - -
+        # ---- 5. Optional: map to TAB (future step)
+        # TODO: call tab-mapping engine here
 
-        # DSP TESTING
+        # ---- 6. DSP testing (YIN pitch estimation) ----
         prediction["dsp_info"] = []
         wavs, _, _, _ = audio_loader.load_audio_dataset()
         yin = YinDsp()
@@ -103,9 +150,8 @@ class Transcriber():
 
 
 def main():
-    base_cfg = BaseConfig()
-
-    # minimal TK root (hidden)
+    pass
+"""    # minimal TK root (hidden)
     root = tk.Tk()
     root.withdraw()
 
@@ -119,10 +165,10 @@ def main():
 
     in_audio_path = Path(file_path)
     audio_name = in_audio_path.stem
-    out_audio_root = base_cfg.INFERENCE_CLIPS_ROOT / "Transcriber"
+    out_audio_root = INFERENCE_CLIPS_ROOT / "Transcriber"
 
     transcriber = Transcriber()
-    prediction = transcriber.transcribe(in_audio_path, out_audio_root, audio_name, target_sr=base_cfg.TARGET_SR, clip_len=base_cfg.CLIP_LENGTH) # use config here?
+    prediction = transcriber.transcribe(in_audio_path, out_audio_root, audio_name, target_sr=TARGET_SR, clip_len=CLIP_LENGTH)
 
     print(" ".join(str(x) for x in prediction["labels"]))
     print(" ".join(f"{x:.2f}" for x in prediction["confidences"]))
@@ -131,7 +177,7 @@ def main():
     for (x, m) in zip(prediction["labels"], prediction["dsp_info"]):
         print(x, m[1]["note_name"])
 
-    print("\nTranscriber finished.\n")
+    print("\nTranscriber finished.\n")"""
 
     
     

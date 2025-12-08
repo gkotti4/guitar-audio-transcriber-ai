@@ -1,3 +1,4 @@
+# cnn_trainer.py
 import os, time, json
 from datetime import datetime
 from pathlib import Path
@@ -461,16 +462,29 @@ class CNNTrainer():
         #print(f"[evaluate] val accuracy: {acc:.4f}, val loss: {avg_loss:.4f}")
         return acc, avg_loss
     
-    def save(self, filename = "cnn_ckpt.ckpt", root = Path.cwd() / "checkpoints" / "cnn", config = None):
-        if config is None:
-            print("[save] Warning. No config provided - using default config.")
-            config = CNNConfig()
-
-        os.makedirs(root, exist_ok=True)
+    def save(self, filename=CNN_CONFIG.DEFAULT_CKPT_NAME, root=CNN_CONFIG.CHECKPOINTS_DIR):
+        root = Path(root)
+        root.mkdir(parents=True, exist_ok=True) #os.makedirs(root, exist_ok=True)
         save_path = root / filename #os.path.join(root, filename)
 
         ckpt = {
-            "config": config,
+            "meta": {
+                "config_version": CONFIG_VERSION,
+                "datetime": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
+                "model_type": "cnn",
+            },
+            "config": {
+                "features": {
+                    "type": "melspec",
+                    "params": asdict(MELSPEC_CONFIG),
+                },
+                "model": {
+                    "type": "cnn",
+                    "params": asdict(CNN_CONFIG),
+                },
+                "target_sr": TARGET_SR,
+                "clip_length": CLIP_LENGTH,
+            },
             "model": self.model.state_dict(),
             "model_init_args": self.model.init_args,
             "optimizer": self.optimizer.state_dict(),
@@ -495,7 +509,7 @@ class CNNTrainer():
         torch.save(ckpt, save_path)
         print(f"[save] Checkpoint saved to {save_path}")
 
-    def load(self, filename = "cnn_ckpt.ckpt", root = "checkpoints/cnn/"):  # DEPRECIATING
+    def load(self, filename = CNN_CONFIG.DEFAULT_CKPT_NAME, root = CNN_CONFIG.CHECKPOINTS_DIR):  # DEPRECIATING
         """NOTE: Trainer should be initialized with a compatible model/optimizer before loading."""
         if not os.path.isdir(root):
             raise FileNotFoundError(f"[load] No directory named: {root}")

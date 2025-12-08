@@ -1,3 +1,4 @@
+# audio_slicer.py
 import os, time
 from datetime import datetime
 from pathlib import Path
@@ -154,7 +155,7 @@ class AudioSlicer:
         sf.write((out_dir / fname), clip, sr)
 
 
-    def sliceNsave(self, audio_path, out_dir, target_sr=11025, hop_len=512, length_sec=0.5, min_sep=0.25, min_db_threshold=-45.0, min_slice_rms_db=-37.5):
+    def sliceNsave(self, audio_path, out_dir, target_sr=TARGET_SR, hop_len=512, length_sec=CLIP_LENGTH, min_sep=0.25, min_db_threshold=-45.0, min_slice_rms_db=-37.5):
         y, sr = self.load_wav(audio_path, target_sr)
         y_gated = self.apply_db_threshold(y=y, min_db=min_db_threshold)
         y_gated = self.apply_rms_threshold(y_gated, hop_len=hop_len)
