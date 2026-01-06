@@ -13,7 +13,7 @@ It is **not feature-complete, not stable, and not yet intended for public use or
 Expect:
 - Breaking changes
 - Experimental model architectures
-- Frequent dataset restructuring
+- Dataset restructuring
 - Incomplete documentation
 - Duplicated code
 - Non-final evaluation methods
@@ -64,7 +64,7 @@ Expect:
 ## Public Usage Disclaimer
 
 This repository is **not yet ready for cloning or external execution**.  
-Many components assume local files, hardcoded paths, and in-progress tooling.
+Many components assume local files and in-progress tooling.
 
 If you're interested in the project direction or future collaboration, feel free to follow or reach out.
 
