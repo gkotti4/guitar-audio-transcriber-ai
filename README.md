@@ -44,7 +44,7 @@ Expect:
 | Component | Current State |
 |---|---|
 | Feature Extraction | MFCC & Mel-Spectrogram pipelines tested |
-| Models | MLP baseline, CNN in progress |
+| Models | MLP, CNN |
 | Dataset | Acoustic and electric guitar datasets under evaluation |
 | Augmentation | Gain, noise, distortion, time-stretch (in progress) |
 | Output | Note classification (e.g., `E2`, `F#3`) |
