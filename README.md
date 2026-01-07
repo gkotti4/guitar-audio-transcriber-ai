@@ -14,6 +14,7 @@ Expect:
 - Breaking changes
 - Experimental model architectures
 - Dataset restructuring
+- Inconsistent comments
 - Incomplete documentation
 - Duplicated code
 - Non-final evaluation methods
