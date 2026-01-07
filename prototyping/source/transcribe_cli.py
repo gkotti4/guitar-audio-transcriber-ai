@@ -17,8 +17,11 @@ def main():
                         help="Path to input .wav file")
     parser.add_argument("--out", type=str, required=False, default=None,
                         help="Directory to save output file (default: ./output)")
-    parser.add_argument("--console_only", type=bool, required=False, default=False,
+    parser.add_argument("--save_clips", type=bool, required=False, default=False,
+                        help="Whether or not to save any clips to disk")
+    parser.add_argument("--save_results", type=bool, required=False, default=False,
                         help="Whether or not to save any output to disk")
+
     args = parser.parse_args()
 
     # --- Resolve / choose audio file ---
@@ -52,7 +55,7 @@ def main():
 
     # --- Resolve output directory (for transcription text) ---
     if args.out is None:
-        out_dir = INFERENCE_OUTPUT_ROOT
+        out_dir = INFERENCE_OUTPUT_ROOT # TODO: Remove for V1
     else:
         out_dir = Path(args.out)
 
@@ -61,23 +64,34 @@ def main():
     # Output file path (e.g. output/MySong_transcription.txt)
     out_file = out_dir / f"{audio_path.stem}_transcription.txt"
 
-    console_only = args.console_only
+    save_results = args.save_results
+    save_clips = args.save_clips
 
     # --- Run transcriber with a temp folder for clips ---
     transcriber = Transcriber()
+    result = None
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir = Path(tmpdir)
-
-        # temp directory used ONLY for sliced clips
-        # (nothing permanent is left behind)
+    if save_clips:
         result = transcriber.transcribe(
             audio_path=audio_path,
-            out_root=tmpdir,              # where slices+dataset live
+            out_root=out_dir,  # where slices+dataset live
             audio_name=audio_path.stem,
             target_sr=TARGET_SR,
             clip_len=CLIP_LENGTH,
         )
+    else:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+
+            # temp directory used ONLY for sliced clips
+            # (nothing permanent is left behind)
+            result = transcriber.transcribe(
+                audio_path=audio_path,
+                out_root=tmpdir,              # where slices+dataset live
+                audio_name=audio_path.stem,
+                target_sr=TARGET_SR,
+                clip_len=CLIP_LENGTH,
+            )
 
     labels = result["labels"]
     confs  = result["confidences"]
@@ -86,7 +100,7 @@ def main():
     for i, (lab, conf) in enumerate(zip(labels, confs)):
         print(f"{i:03d}  {lab:>4}  (conf={conf:.2f})")
     # --- Save to text file ---
-    if not console_only:
+    if not save_results:
         with out_file.open("w", encoding="utf-8") as f:
             for i, (lab, conf) in enumerate(zip(labels, confs)):
                 f.write(f"{i},{lab},{conf:.4f}\n")
