@@ -25,18 +25,28 @@ Expect:
 
 ---
 
-## Current Goals
+## Prototype Version 1.0 Goals
 
 - [x] Build a reliable pipeline for classifying single guitar notes
 - [x] Train and compare MLP and CNN architectures
-- [x] Produce prediction score from multiple models (ensemble AI)
-- [x] Establish feature processing (MFCC / Mel-Spectrograms)
-- [x] Build dataset loaders, slicing tools, and training loops
-- [x] Create dataset via slicing tool on recorded guitar clips
+- [x] Produce prediction scores from multiple models (ensemble inference)
+- [x] Establish feature processing (MFCC / Mel-Spectrograms) and training infrastructure
+- [x] Create a labeled dataset via automated slicing of recorded guitar clips
+- [x] Begin mapping pitch predictions to playable guitar tablature
 - [ ] Add fine-tuning and domain adaptation (acoustic → electric)
 - [ ] Expand beyond single-note classification
-- [x] Begin mapping predictions to playable guitar tablature
-- [ ] Investigate polyphonic transcription and chord recognition
+
+---
+
+## Upcoming / Experimental Prototypes
+- Live tab tracking (real-time)
+- HTML tab viewer with audio playback
+- MIDI export / plugin integration
+
+---
+
+## Future Research Directions
+- Polyphonic transcription and chord recognition
 
 ---
 
@@ -65,7 +75,7 @@ Expect:
 ## Public Usage Disclaimer
 
 This repository is **not yet ready for cloning or external execution**.  
-Many components assume local files and in-progress tooling.
+Many components assume local files, in-progress tooling, and not yet uploaded files.
 
 If you're interested in the project direction or future collaboration, feel free to follow or reach out.
 
