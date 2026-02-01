@@ -21,10 +21,9 @@ class NotePredictor:
 
         self.reverse_map = None
 
-        self.cnn_weight = 0.75  # try multiple predictions at once and compare {x, x, x}
+        self.cnn_weight = 0.9
         self.mlp_weight = (1.0 - self.cnn_weight)
         # yin/dsp weight?
-
 
     # - MODELS
     def load_models(
@@ -99,7 +98,6 @@ class NotePredictor:
             print("[load_models] Warning: reverse_map is not set; predictions will be class indices only.")
 
 
-
     # - PREDICT NOTES (confidence and weighting)
     def predict(self, mfcc_features=None, melspec_features=None):
         """
@@ -155,7 +153,26 @@ class NotePredictor:
         }
 
 
+    def predict_debug(self, test_weights, mfcc_features=None, melspec_features=None):
+        # try multiple predictions at once and compare {x, x, x}
+        # where, weight, represents top level model weight - currently CNN
+        predictions = []
+        cnn_weight = self.cnn_weight
+        mlp_weight = self.mlp_weight
 
+        for weight in test_weights:
+            self.cnn_weight = weight
+            self.mlp_weight = 1 - weight
+            prediction = self.predict(mfcc_features=mfcc_features, melspec_features=melspec_features)
+            predictions.append((weight, prediction))
+
+            print("weight: ", weight)
+            print(prediction["labels"], prediction["confidences"])
+            print()
+
+        self.cnn_weight = cnn_weight
+        self.mlp_weight = mlp_weight
+        return predictions
 
 
 

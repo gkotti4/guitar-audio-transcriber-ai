@@ -71,7 +71,7 @@ CHECKPOINTS_ROOT = PROJECT_ROOT / "data" / "checkpoints"
 # GLOBAL AUDIO CONSTANTS
 # ---------------------------
 TARGET_SR = 11025
-CLIP_LENGTH = 0.50
+CLIP_DURATION = 0.50
 
 
 # ---------------------------
@@ -81,9 +81,10 @@ CLIP_LENGTH = 0.50
 class MFCCConfig:
     N_MFCC: int = 32
     BATCH_SIZE: int = 32
-    #NORMALIZE_FEATURES: bool = False     # deprecated
+    #NORMALIZE_FEATURES: bool = False     # deprecated - replaced w/ scaler
     STANDARD_SCALER: bool = True
-    NORMALIZE_AUDIO_VOLUME: bool = True
+    NORMALIZE_AUDIO_VOLUME: bool = False #True
+    ADD_PITCH_FEATURES: bool = True       # recent addition - make sure implemented correctly in ALL mfcc feature functions
 
 
 @dataclass(frozen=True)
@@ -92,7 +93,9 @@ class MelSpecConfig:
     N_FFT: int = 512
     HOP_LENGTH: int = 256
     BATCH_SIZE: int = 32
-    NORMALIZE_AUDIO_VOLUME: bool = True
+    NORMALIZE_AUDIO_VOLUME: bool = False #True
+    # TO_DB ? always true
+    TO_DB: bool = True # ! not yet enforced ! (2/1)
 
 
 @dataclass(frozen=True)
@@ -140,14 +143,28 @@ class CNNConfig:
 
 @dataclass(frozen=True)
 class AudioSlicerConfig:
-    #TIME_STAMP: str = datetime.now().strftime("%m-%d_%H-%M-%S")
-
     MIN_IN_DB_THRESHOLD: float = -35
     MIN_SLICE_RMS_DB: float = -30
 
     HOP_LEN: int = 256 * 3
     MIN_SEP: float = 0.25
 
+'''
+@dataclass(frozen=True)
+class NotePredictorConfig:
+    CNN_WEIGHT: float = 0.75
+    MLP_WEIGHT: float = 1 - CNN_WEIGHT
+'''
+
+'''
+@dataclass(frozen=True)
+class LiveMicConfig:
+    GATE_DB: float = -37.5          # ignore below this
+    ONSET_JUMP_DB: float = 6.0      # how sharp the rise must be
+    MIN_SEP: float = 0.20           # seconds between onsets
+    HANGOVER_OFF: float = 0.10      # seconds of quiet to end a note
+    OFF_DB: float = -50.0           # consider "off" below this
+'''
 
 # ---------------------------
 # STATIC INSTANCES (THE REAL CONFIG OBJECTS)

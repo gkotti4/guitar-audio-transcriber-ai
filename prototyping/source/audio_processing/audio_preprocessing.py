@@ -42,7 +42,7 @@ def get_available_datasets(datasets_root):
     return all_names, all_paths
 
 
-
+# TODO: move to dedicated data/audio loading/processing file
 class AudioDatasetLoader:
     def __init__(self,
                  dataset_roots: list[Path] | list[str],
@@ -104,6 +104,11 @@ class AudioDatasetLoader:
             srs.append(sr)
             labels.append(label)
             paths.append(path)
+
+        if len(wavs) == 0:
+            raise FileNotFoundError("load_audio_dataset: No audio files found.")
+            #print("WARNING: load_audio_dataset: No audio files found.")
+            #return [], [], [], []
 
         if pad_to_max:
             # wavs = [np.ndarray(), np.ndarray(), ...]
@@ -254,8 +259,9 @@ class MelFeatureBuilder:
         mfcc_features,_,_,_ = self.extract_mfcc_features(
             audio_loader,
             mfcc_config["N_MFCC"],
-            False, # mfcc_config.NORMALIZE_FEATURES, # depreciated
-            mfcc_config["NORMALIZE_AUDIO_VOLUME"]
+#            False, # depreciated
+            mfcc_config["NORMALIZE_AUDIO_VOLUME"],
+            mfcc_config["ADD_PITCH_FEATURES"],
         )
         if scaler: # or if mlp_config.STANDARD_SCALER
             mfcc_features = scaler.transform(mfcc_features)
@@ -277,7 +283,6 @@ class MelFeatureBuilder:
     def extract_mfcc_features(self,
                               audio_loader,
                               n_mfcc=13,
-                              normalize_features: bool = False,
                               normalize_audio_volume: bool = False,
                               add_pitch_features: bool = True,
     ):
@@ -307,10 +312,11 @@ class MelFeatureBuilder:
             )  # shape: (n_mfcc, n_frames)
 
             mfcc_vec = mfcc.mean(axis=1)  # shape: (n_mfcc,)
-            if normalize_features:
-                mfcc_vec = (mfcc_vec - mfcc_vec.mean()) / (mfcc_vec.std() + 1e-6)
 
-            # --- TESTING: DSP pitch feature(s) --- TODO: add as config var
+            #if normalize_features: # depreciated - replaced by scaler
+            #    mfcc_vec = (mfcc_vec - mfcc_vec.mean()) / (mfcc_vec.std() + 1e-6)
+
+            # --- TESTING: DSP pitch feature(s) ---
             if add_pitch_features:
                 yin = YinDsp() # fmin=, fmax=
                 pitch_hz, note_info = yin.estimate_pitch(wave, audio_loader.target_sr)
@@ -333,14 +339,6 @@ class MelFeatureBuilder:
 
         return X, y_encoded, num_classes, reverse_map
 
-    def build_mfcc_dataloader(self, audio_loader, n_mfcc=13, batch_size: int = 32, shuffle: bool = True):
-        """
-        MFCC-only DataLoader (for MLP).
-        """
-        X, y_encoded, num_classes, reverse_map = self.extract_mfcc_features(audio_loader, n_mfcc)
-        dataset = self._create_tensor_dataset(X, y_encoded)
-        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
-        return dataloader, num_classes, reverse_map
 
     def build_mfcc_train_val_dataloaders(
             self,
@@ -351,7 +349,7 @@ class MelFeatureBuilder:
             shuffle_train: bool = True,
             shuffle_val: bool = False,
             normalize_audio_volume=False,
-            normalize_features=False,
+            #normalize_features=False, # depreciated - replaced (2/1/26)
             standard_scaler: bool = True,
             seed: int = 42,
             num_workers: int = 0,
@@ -362,7 +360,7 @@ class MelFeatureBuilder:
         MFCC-only train/val DataLoaders (for MLP).
         """
         # 1) extract features
-        X, y_encoded, num_classes, reverse_map = self.extract_mfcc_features(audio_loader, n_mfcc, normalize_features, normalize_audio_volume)
+        X, y_encoded, num_classes, reverse_map = self.extract_mfcc_features(audio_loader, n_mfcc, normalize_audio_volume)
 
         # 2) stratified split
         X_tr, X_val, y_tr, y_val = train_test_split(
@@ -462,6 +460,8 @@ class MelFeatureBuilder:
         #print(f"Extracted Mel-spectrogram features for {X.shape[0]} samples. X shape: {tuple(X.shape)}")
         return X, y_encoded, num_classes, reverse_map
 
+
+
     def build_melspec_dataloader(self,
                               audio_loader,
                               n_mels: int = 128,
@@ -559,6 +559,85 @@ class MelFeatureBuilder:
 
 
 
+    # --- Audio array inference methods (single audio) (non-disk) (main use: Live Mic Transcriber) (2/1/26) ---
+    def extract_inference_features_from_audio(
+        self,
+        audio: np.ndarray,
+        target_sr: int = TARGET_SR,
+        mfcc_config: MFCCConfig = None,
+        melspec_config: MelSpecConfig = None,
+        scaler: StandardScaler = None,
+        melspec_to_db: bool = True
+    ):
+
+        if mfcc_config is None:
+            mfcc_config = asdict(MFCCConfig())
+        if melspec_config is None:
+            melspec_config = asdict(MelSpecConfig())
+        add_pitch_features=True
+
+        # --- Extract MFCC Features -----------------------------------------------------------
+        y = audio.astype(np.float32)
+        if mfcc_config["NORMALIZE_AUDIO_VOLUME"]:
+            y = self._normalize_audio_volume(y)
+
+        mfcc = librosa.feature.mfcc(
+            y=y,
+            sr=target_sr,
+            n_mfcc=mfcc_config["N_MFCC"],
+        )  # shape: (n_mfcc, n_frames)
+
+        mfcc_vec = mfcc.mean(axis=1)  # shape: (n_mfcc,)
+
+        # --- TESTING: DSP pitch feature(s) ---
+        if mfcc_config["ADD_PITCH_FEATURES"]:
+            yin = YinDsp() # fmin=, fmax=
+            pitch_hz, note_info = yin.estimate_pitch(y, target_sr=target_sr)
+
+            if pitch_hz is not None:
+                pitch_feat = float(np.log10(pitch_hz))
+                dsp_feats = np.array([pitch_feat], dtype=np.float32)
+                mfcc_vec = np.concatenate((mfcc_vec, dsp_feats), axis=0)
+
+        mfcc_features = np.vstack([mfcc_vec])  # shape: (n_samples, n_mfcc)
+        # ---------------------------------------------------------------------------------------
+
+
+        # --- Extract MelSpec Features ----------------------------------------------------------
+        # performance consideration when creating again for every note (single audio)
+        mel_transform = ta.transforms.MelSpectrogram(
+            sample_rate=target_sr,
+            n_fft=melspec_config["N_FFT"],
+            hop_length=melspec_config["HOP_LENGTH"],
+            n_mels=melspec_config["N_MELS"],
+            power=2.0,
+        )
+        to_db_transform = ta.transforms.AmplitudeToDB(stype="power")
+
+        y = audio.astype(np.float32)
+        if melspec_config["NORMALIZE_AUDIO_VOLUME"]:
+            y = self._normalize_audio_volume(y)
+
+        y_t = torch.from_numpy(y).unsqueeze(0)  # (1, T)
+        spec = mel_transform(y_t)  # (1, n_mels, T_spec)
+        if melspec_to_db: # always true - not yet in Config
+            spec = to_db_transform(spec)
+
+        spec_np = spec.cpu().numpy()  # (1, n_mels, T_spec)
+        melspec_features = spec_np[:, None, :, :]  # (1, 1, n_mels, T_spec)
+        # ---------------------------------------------------------------------------------------
+
+        return mfcc_features, melspec_features
+
+
+
+
+
+
+
+
+
+''' --- DEPRECIATED OR PREVIOUS ITERATION/VERSION METHODS --- '''
 '''
     def build_train_val_dataloaders(
             self,
@@ -612,3 +691,11 @@ class MelFeatureBuilder:
 
         return dl_tr, dl_val, scaler
 '''
+'''def build_mfcc_dataloader(self, audio_loader, n_mfcc=13, batch_size: int = 32, shuffle: bool = True, normalize_audio_volume=True): # must be updated (check function parameters)
+    """
+    MFCC-only DataLoader (for MLP).
+    """
+    X, y_encoded, num_classes, reverse_map = self.extract_mfcc_features(audio_loader, n_mfcc, normalize_audio_volume)
+    dataset = self._create_tensor_dataset(X, y_encoded)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
+    return dataloader, num_classes, reverse_map'''

@@ -1,5 +1,5 @@
 # transcribe_cli.py
-from config import TARGET_SR, CLIP_LENGTH, INFERENCE_OUTPUT_ROOT
+from config import TARGET_SR, CLIP_DURATION, INFERENCE_OUTPUT_ROOT
 from transcribe import Transcriber
 import os, argparse
 import tempfile
@@ -9,7 +9,9 @@ from pprint import pprint, pformat
 import tkinter as tk
 from tkinter import filedialog, messagebox
 
-
+### ----- VERSION NOTES ----- ###
+# Only supports .wav files
+### ------------------------- ###
 
 def main():
     parser = argparse.ArgumentParser(description="Guitar Audio Transcriber – Prototype V1")
@@ -21,16 +23,16 @@ def main():
                         help="Whether or not to save any clips to disk")
     parser.add_argument("--save_results", type=bool, required=False, default=False,
                         help="Whether or not to save any output to disk")
-
     args = parser.parse_args()
 
-    # --- Resolve / choose audio file ---
+    # --- HANDLE CLI ARGS
+    # --- Resolve / Choose audio file ---
     audio_path: Path | None = None
 
     if args.audio is not None:
-        candidate = Path(args.audio)
-        if candidate.is_file() and candidate.suffix.lower() == ".wav":
-            audio_path = candidate
+        audio_file = Path(args.audio)
+        if audio_file.is_file() and audio_file.suffix.lower() == ".wav":
+            audio_path = audio_file
 
     # If no valid --audio given, open file dialog
     if audio_path is None:
@@ -47,7 +49,7 @@ def main():
 
         audio_path = Path(file_path)
 
-    # Final safety check
+    # Final audio_file safety check
     if not audio_path.is_file():
         raise FileNotFoundError(f"Audio file not found: {audio_path}")
     if audio_path.suffix.lower() != ".wav":
@@ -67,6 +69,7 @@ def main():
     save_results = args.save_results
     save_clips = args.save_clips
 
+    # --- TRANSCRIBE AUDIO
     # --- Run transcriber with a temp folder for clips ---
     transcriber = Transcriber()
     result = None
@@ -77,22 +80,20 @@ def main():
             out_root=out_dir,  # where slices+dataset live
             audio_name=audio_path.stem,
             target_sr=TARGET_SR,
-            clip_len=CLIP_LENGTH,
+            clip_duration=CLIP_DURATION,
         )
     else:
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir = Path(tmpdir)
-
-            # temp directory used ONLY for sliced clips
-            # (nothing permanent is left behind)
             result = transcriber.transcribe(
                 audio_path=audio_path,
                 out_root=tmpdir,              # where slices+dataset live
                 audio_name=audio_path.stem,
                 target_sr=TARGET_SR,
-                clip_len=CLIP_LENGTH,
+                clip_duration=CLIP_DURATION,
             )
 
+    # --- RESULTS
     labels = result["labels"]
     confs  = result["confidences"]
 

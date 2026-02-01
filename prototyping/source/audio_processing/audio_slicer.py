@@ -9,9 +9,7 @@ from scipy.ndimage import median_filter
 import numpy as np
 from config import *
 
-
 #_CFG = AudioSlicerConfig()
-
 
 
 
@@ -117,7 +115,7 @@ class AudioSlicer:
 
     # -- onset detection slicing
     @staticmethod
-    def detect_onsets(y, sr=11025, hop_len=512, min_sep=0.25):
+    def detect_onsets(y, sr=11025, hop_len=512, min_sep=0.25) -> list[int]:
         onset_env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=hop_len)
 
         frames = librosa.onset.onset_detect(onset_envelope=onset_env, sr=sr, hop_length=hop_len, backtrack=True) # backtrack here? or manual?
@@ -155,7 +153,7 @@ class AudioSlicer:
         sf.write((out_dir / fname), clip, sr)
 
 
-    def sliceNsave(self, audio_path, out_dir, target_sr=TARGET_SR, hop_len=512, length_sec=CLIP_LENGTH, min_sep=0.25, min_db_threshold=-45.0, min_slice_rms_db=-37.5):
+    def sliceNsave(self, audio_path, out_dir, target_sr=TARGET_SR, hop_len=512, length_sec=CLIP_DURATION, min_sep=0.25, min_db_threshold=-45.0, min_slice_rms_db=-37.5):
         y, sr = self.load_wav(audio_path, target_sr)
         y_gated = self.apply_db_threshold(y=y, min_db=min_db_threshold)
         y_gated = self.apply_rms_threshold(y_gated, hop_len=hop_len)

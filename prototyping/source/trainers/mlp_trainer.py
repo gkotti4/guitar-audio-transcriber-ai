@@ -457,7 +457,7 @@ class MLPTrainer():
                     "params": asdict(MLP_CONFIG),
                 },
                 "target_sr": TARGET_SR,
-                "clip_length": CLIP_LENGTH,
+                "clip_length": CLIP_DURATION,
             },
             "model": self.model.state_dict(),
             "model_init_args": self.model.init_args,
