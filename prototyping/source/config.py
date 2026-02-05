@@ -79,22 +79,21 @@ CLIP_DURATION = 0.50
 # ---------------------------
 @dataclass(frozen=True)
 class MFCCConfig:
-    N_MFCC: int = 32
+    N_MFCC: int = 32 * 2 # original: 32 (2/2)
     BATCH_SIZE: int = 32
     #NORMALIZE_FEATURES: bool = False     # deprecated - replaced w/ scaler
     STANDARD_SCALER: bool = True
-    NORMALIZE_AUDIO_VOLUME: bool = False #True
+    NORMALIZE_AUDIO_VOLUME: bool = True # check effects (2/2)
     ADD_PITCH_FEATURES: bool = True       # recent addition - make sure implemented correctly in ALL mfcc feature functions
 
 
 @dataclass(frozen=True)
 class MelSpecConfig:
-    N_MELS: int = 64
-    N_FFT: int = 512
+    N_MELS: int = 32 * 2
+    N_FFT: int = 512 * 4 # (2/2) original: 256
     HOP_LENGTH: int = 256
     BATCH_SIZE: int = 32
-    NORMALIZE_AUDIO_VOLUME: bool = False #True
-    # TO_DB ? always true
+    NORMALIZE_AUDIO_VOLUME: bool = True # check effects (2/2)
     TO_DB: bool = True # ! not yet enforced ! (2/1)
 
 
@@ -143,11 +142,11 @@ class CNNConfig:
 
 @dataclass(frozen=True)
 class AudioSlicerConfig:
-    MIN_IN_DB_THRESHOLD: float = -35
-    MIN_SLICE_RMS_DB: float = -30
+    MIN_IN_DB_THRESHOLD: float = -32.5
+    MIN_SLICE_RMS_DB: float = -31.0
 
-    HOP_LEN: int = 256 * 3
-    MIN_SEP: float = 0.25
+    HOP_LEN: int = 256 * 2
+    MIN_SEP: float = 0.3
 
 '''
 @dataclass(frozen=True)

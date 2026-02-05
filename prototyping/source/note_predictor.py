@@ -21,7 +21,7 @@ class NotePredictor:
 
         self.reverse_map = None
 
-        self.cnn_weight = 0.9
+        self.cnn_weight = 0.8
         self.mlp_weight = (1.0 - self.cnn_weight)
         # yin/dsp weight?
 

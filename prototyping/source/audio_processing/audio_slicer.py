@@ -105,7 +105,7 @@ class AudioSlicer:
 
     # -- per slice preprocessing
     @staticmethod
-    def is_slice_loud_enough(clip, min_rms_db=-37.5):
+    def is_slice_loud_enough(clip, min_rms_db=-40.0):
         eps = 1e-10
         rms = np.sqrt(np.mean(clip**2)) # root mean squared - avg. energy or loudness of a signal
         rms_db = 20 * np.log10(rms + eps)
@@ -153,7 +153,7 @@ class AudioSlicer:
         sf.write((out_dir / fname), clip, sr)
 
 
-    def sliceNsave(self, audio_path, out_dir, target_sr=TARGET_SR, hop_len=512, length_sec=CLIP_DURATION, min_sep=0.25, min_db_threshold=-45.0, min_slice_rms_db=-37.5):
+    def sliceNsave(self, audio_path, out_dir, target_sr=TARGET_SR, hop_len=SLICER_CONFIG.HOP_LEN, length_sec=CLIP_DURATION, min_sep=SLICER_CONFIG.MIN_SEP, min_db_threshold=SLICER_CONFIG.MIN_IN_DB_THRESHOLD, min_slice_rms_db=SLICER_CONFIG.MIN_SLICE_RMS_DB):
         y, sr = self.load_wav(audio_path, target_sr)
         y_gated = self.apply_db_threshold(y=y, min_db=min_db_threshold)
         y_gated = self.apply_rms_threshold(y_gated, hop_len=hop_len)
@@ -164,7 +164,7 @@ class AudioSlicer:
             clip, times = self.slice_audio(y=y, onset=onset, next_onset=next_onset, sr=sr, length_sec=length_sec)
             onset_s = onset / sr
             if not self.is_slice_loud_enough(clip, min_slice_rms_db):
-                print(f"[sliceNsave] dropped clip at {onset_s:.2f}s")
+                print(f"[sliceNsave] dropped clip at {onset_s:.2f}s; [is_slice_loud_enough]")
                 continue
             self.save_clip(clip, sr, out_dir, i, onset_s)
             total += 1

@@ -27,7 +27,10 @@ from enum import Enum
 #note_q = queue.Queue(maxsize=2)
 #state = InferenceState.IDLE.value
 
-
+'''
+    Prototype Notes:
+        - Make sure to set related values to their respective CONFIG vars (i.e. HOP_LEN, MIN_SEP, etc)
+'''
 
 
 def rms_db(x: np.ndarray, eps=1e-12):
@@ -47,8 +50,10 @@ class RingBuffer():
         self.ring = deque(maxlen=maxlen)
 
     def push(self, data: np.ndarray):
-        #self.ring.extend(data.tolist())
-        self.ring.extend(list(data))    # TODO: TESTING TESTING TESTING
+        self.ring.extend(data.tolist())
+
+    def pop(self):
+        self.ring.pop()
 
     def get_buffer(self) -> np.ndarray:
         return np.array(list(self.ring), dtype=np.float32)
@@ -71,6 +76,10 @@ class RingBuffer():
     def clear(self):
         self.ring.clear()
 
+    def clear_from(self, idx):
+        for i in range(idx):
+            self.ring.pop() # or append(zeros)
+        #del self.ring[:idx]
 
 class LiveMic:
     def __init__(self, device=None, buffer_duration=1.5, sample_rate=TARGET_SR, channels=1, blocksize=1024):
@@ -84,7 +93,7 @@ class LiveMic:
         self.note_q = queue.Queue(maxsize=2)
 
     def detect_onsets(self, y):
-        onsets = audio_slicer.AudioSlicer.detect_onsets(y, self.sample_rate, hop_len=(256*4), min_sep=0.5)
+        onsets = audio_slicer.AudioSlicer.detect_onsets(y, self.sample_rate, hop_len=(256*4), min_sep=0.3)
         return onsets
 
     @staticmethod
@@ -138,10 +147,9 @@ class LiveMic:
             dtype="float32"
         ):
             # Main Thread 1
-            min_slice_t = 0.5 # seconds
+            min_slice_t = 0.3 # seconds # MIN_SEP in config?
             min_slice_len = (min_slice_t * self.sample_rate) # index range
-            max_slice_t = 1.5 # seconds
-            max_slice_len = (max_slice_t * self.sample_rate) # index range
+
             try:
                 while True:
                     try:
@@ -149,34 +157,40 @@ class LiveMic:
                         if self.buffer.is_full():
                             buf = self.buffer.get_buffer() # get copy for thread/sync safety
 
-                            #onsets = []
                             onsets = self.detect_onsets(buf)
-                            #if len(onsets) > 0:
-                            #    onsets = onsets + indices #.append((indices, time.time()))
+                            onsets = [int(o) for o in onsets] # redundant
 
-                            # Check if we should package and send note to Inference
-                            # Ordering: len(onsets) > 1, onset note len > x, time
-                            # Queue note IF:
-                            '''for i, onset in enumerate(onsets):
+                            # Slice from onsets to valid note
+                            h_idx = 0
+                            if len(onsets) == 1:
+                                s = self.slice_from(buf, onsets[0], -1)
+                                if len(s) > min_slice_len:
+                                    self.note_q.put_nowait(s)
+                                    h_idx = onsets[0]
+                                    del onsets[:]
 
-                                if len(onsets) > 1:
-                                    s = self.slice_from(buf, onset, onsets[i+1])
-                                    if len(s) > min_slice_len:
-                                        self.note_q.put_nowait(s)
-                                        del onsets[:onsets[i+1]]
-                                        continue
+                            while len(onsets) >= 2:
+                                s = self.slice_from(buf, onsets[0], onsets[1])
+                                if len(s) > min_slice_len:
+                                    self.note_q.put_nowait(s)
+                                    h_idx = onsets[1]
+                                    del onsets[:2]
+                                else:
+                                    h_idx = onsets[0]
+                                    del onsets[:1]
 
-                                if len(onsets) == 1:
-                                    s = self.slice_from(buf, onset, -1)
-                                    if len(s) > min_slice_len:
-                                        self.note_q.put_nowait(s)
-                                        del onsets[:-1]
-                                        continue'''
+                            self.buffer.clear_from(h_idx+1)
+
+
+
+
+
+
                             # PROTO send to queue, send entire buffer, let inference onset slicing work
-                            if len(onsets) > 0:
-                                print(onsets)
-                                self.note_q.put_nowait(np.array(buf[onsets[0]:], dtype=np.float32, copy=False))
-                                self.buffer.clear()
+                            #if len(onsets) > 0:
+                            #    print(onsets)
+                            #    self.note_q.put_nowait(np.array(buf[onsets[0]:], dtype=np.float32, copy=False))
+                            #    self.buffer.clear()
 
 
                         # X. See if note available to send to inference

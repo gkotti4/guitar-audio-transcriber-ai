@@ -283,7 +283,7 @@ class MelFeatureBuilder:
     def extract_mfcc_features(self,
                               audio_loader,
                               n_mfcc=13,
-                              normalize_audio_volume: bool = False,
+                              normalize_audio_volume: bool = False, # check if needed
                               add_pitch_features: bool = True,
     ):
         """
@@ -401,7 +401,7 @@ class MelFeatureBuilder:
         n_mels: int = 128,
         n_fft: int = 1024,
         hop_length: int = 256,
-        normalize_audio_volume: bool = False,
+        normalize_audio_volume: bool = False, # check if needed
         to_db: bool = True,
     ):
         """

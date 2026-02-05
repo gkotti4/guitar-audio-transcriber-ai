@@ -43,15 +43,15 @@ class CNN(nn.Module):
     def __init__(
         self,
         num_classes,
-        in_channels = 1,
-        base_channels = 32,
-        num_blocks = 3,
-        hidden_dim = 256,
-        dropout = 0.1,
-        kernel_size = 3,
-        use_batchnorm = True,
-        use_maxpool = True,
-        adaptive_pool = (4, 4),
+        in_channels: int = 1,
+        base_channels: int = 32,
+        num_blocks: int = 3,
+        hidden_dim: int = 256,
+        dropout: float = 0.1,
+        kernel_size: int = 3,
+        use_batchnorm: bool = True,
+        use_maxpool: bool = True,
+        adaptive_pool: tuple = (4, 4),
     ):
         super().__init__()
 
@@ -67,8 +67,9 @@ class CNN(nn.Module):
             "adaptive_pool": adaptive_pool,
         }
 
+        # - Convolutions
         conv_layers = []
-        channels = [in_channels]
+        channels = [in_channels] # (in: grayscale) -> (hidden: kernels)
 
         # Build channel progression: 1 → 32 → 64 → 128 for 3 blocks
         for b in range(num_blocks):
@@ -81,20 +82,25 @@ class CNN(nn.Module):
                     in_ch,
                     out_ch,
                     kernel_size=kernel_size,
-                    padding=kernel_size // 2,
+                    padding=kernel_size // 2, # output h x w stays the same as input (based on kernel size)
                 )
             )
+            # (normalization)
             if use_batchnorm:
                 conv_layers.append(nn.BatchNorm2d(out_ch))
+
+            # activation
             conv_layers.append(nn.LeakyReLU(inplace=True))      # Recent Change: to LeakyReLU from ReLU (12/5)
 
+            # (pooling)
             if use_maxpool:
                 conv_layers.append(nn.MaxPool2d(2))  # halve H,W
 
+            # (dropout)
             if dropout > 0.0:
                 conv_layers.append(nn.Dropout(dropout))
 
-        # Optional: adaptive pooling to a fixed spatial size (independent of input H,W)
+        # (adaptive pooling) to a fixed spatial size (independent of input H,W)
         conv_layers.append(nn.AdaptiveAvgPool2d(adaptive_pool))
 
         self.features = nn.Sequential(*conv_layers)
@@ -103,6 +109,7 @@ class CNN(nn.Module):
         feat_h, feat_w = adaptive_pool
         feat_dim = channels[-1] * feat_h * feat_w
 
+        # - Classification
         classifier_layers = list()
         classifier_layers.append(nn.Flatten())
 
@@ -110,7 +117,7 @@ class CNN(nn.Module):
             classifier_layers.extend(
                 [
                     nn.Linear(feat_dim, hidden_dim),
-                    nn.LeakyReLU(inplace=True), # Recent Change: to LeakyReLU from ReLU
+                    nn.LeakyReLU(inplace=True),
                 ]
             )
             if dropout > 0.0:
@@ -173,6 +180,7 @@ class CNNTrainer():
         self.epoch                  = 0
 
     def _check_dims(self, dl):
+        # Check dimension of batch in dataloader, should be 4
         if dl is None or len(dl) == 0:
             raise ValueError("[_check_dims] dl is empty.")
 
