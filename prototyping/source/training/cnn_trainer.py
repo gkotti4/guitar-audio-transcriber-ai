@@ -21,7 +21,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 import sklearn.metrics as metrics
 
-from audio_processing.audio_preprocessing import *
+from audio.audio_preprocessing import *
 from config import CNNConfig
 
 

@@ -13,9 +13,9 @@ from tkinter import filedialog, messagebox
 import librosa
 
 from config import *
-from audio_processing.audio_preprocessing import AudioDatasetLoader, MelFeatureBuilder, get_available_datasets
-from audio_processing.audio_slicer import AudioSlicer
-from dsp_algorithms.yin import YinDsp
+from audio.audio_preprocessing import AudioDatasetLoader, MelFeatureBuilder, get_available_datasets
+from audio.audio_slicer import AudioSlicer
+from dsp.yin import YinDsp
 from note_predictor import NotePredictor
 
 import torch
@@ -80,8 +80,8 @@ class Transcriber:
         audio_path: Path | str,
         out_root: Path | str = INFERENCE_OUTPUT_ROOT,
         audio_name: str = "transcribe_audio",
-        target_sr: int = TARGET_SR,
-        clip_duration: float = CLIP_DURATION,
+        target_sr: int = TARGET_SR, # NOTE: MUST BE SAME VALUE USED IN TRAINING
+        clip_duration: float = CLIP_DURATION, # NOTE: MUST BE SAME VALUE USED IN TRAINING
         #save_clips_to_disk: bool = False,
     ) -> dict:
         """

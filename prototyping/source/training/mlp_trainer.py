@@ -22,7 +22,7 @@ import sklearn.metrics as metrics
 import matplotlib.pyplot as plt
 
 from config import MLPConfig
-from audio_processing.audio_preprocessing import *
+from audio.audio_preprocessing import *
 
 
 

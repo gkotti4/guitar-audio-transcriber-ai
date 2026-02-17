@@ -57,8 +57,9 @@ CONFIG_VERSION = "1.0.0"
 # IMPORTANT:
 # For packaged apps (pyz/exe), Path.cwd() is the correct root.
 # For development, this still resolves correctly.
-PROJECT_ROOT = Path.cwd().parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent # Path.cwd().parent
 DATASETS_ROOT = PROJECT_ROOT / "data" / "datasets"
+PERSONAL_DATASETS_ROOT = DATASETS_ROOT / "personal"
 #SOURCE_ROOT = PROJECT_ROOT / "source"
 INFERENCE_ROOT = PROJECT_ROOT / "data" / "inference"
 INFERENCE_CLIPS_ROOT = INFERENCE_ROOT / "sliced_clips"
@@ -70,7 +71,7 @@ CHECKPOINTS_ROOT = PROJECT_ROOT / "data" / "checkpoints"
 # ---------------------------
 # GLOBAL AUDIO CONSTANTS
 # ---------------------------
-TARGET_SR = 11025
+TARGET_SR = 11025 * (2)
 CLIP_DURATION = 0.50
 
 
@@ -90,11 +91,11 @@ class MFCCConfig:
 @dataclass(frozen=True)
 class MelSpecConfig:
     N_MELS: int = 32 * 2
-    N_FFT: int = 512 * 4 # (2/2) original: 256
+    N_FFT: int = 512 * 4 # original: 256
     HOP_LENGTH: int = 256
     BATCH_SIZE: int = 32
     NORMALIZE_AUDIO_VOLUME: bool = True # check effects (2/2)
-    TO_DB: bool = True # ! not yet enforced ! (2/1)
+    TO_DB: bool = True # TODO: ! not yet enforced ! (2/1)
 
 
 @dataclass(frozen=True)
@@ -142,11 +143,14 @@ class CNNConfig:
 
 @dataclass(frozen=True)
 class AudioSlicerConfig:
-    MIN_IN_DB_THRESHOLD: float = -32.5
-    MIN_SLICE_RMS_DB: float = -31.0
+    MIN_IN_DB_THRESHOLD: float = -32.5  # only accept audio values X db or higher
+    MIN_SLICE_RMS_DB: float = -37.0     # is slice loud enough
 
     HOP_LEN: int = 256 * 2
     MIN_SEP: float = 0.3
+
+    ATTACK_SKIP_SEC = 0.1     # duration to jump ahead when slicing notes to avoid 'attack' portion of note (2/13)
+
 
 '''
 @dataclass(frozen=True)
@@ -164,6 +168,7 @@ class LiveMicConfig:
     HANGOVER_OFF: float = 0.10      # seconds of quiet to end a note
     OFF_DB: float = -50.0           # consider "off" below this
 '''
+
 
 # ---------------------------
 # STATIC INSTANCES (THE REAL CONFIG OBJECTS)

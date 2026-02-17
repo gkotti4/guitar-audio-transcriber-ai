@@ -2,12 +2,12 @@
 import os, time
 from pathlib import Path
 from config import *
-from audio_processing.audio_preprocessing import *
-from trainers.mlp_trainer import *
-from trainers.cnn_trainer import *
+from audio.audio_preprocessing import *
+from training.mlp_trainer import *
+from training.cnn_trainer import *
 import numpy as np
 import torch
-import dsp_algorithms.yin
+import dsp.yin
 
 
 
@@ -21,7 +21,7 @@ class NotePredictor:
 
         self.reverse_map = None
 
-        self.cnn_weight = 0.8
+        self.cnn_weight = 0.80
         self.mlp_weight = (1.0 - self.cnn_weight)
         # yin/dsp weight?
 
@@ -187,5 +187,6 @@ def main():
 
 
 if __name__ == "__main__":
-    #main()
     pass
+    #main()
+

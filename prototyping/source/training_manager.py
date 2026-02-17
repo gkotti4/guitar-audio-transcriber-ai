@@ -5,10 +5,10 @@ from pathlib import Path
 from dataclasses import asdict
 
 from config import *
-from audio_processing.audio_preprocessing import *
+from audio.audio_preprocessing import *
 
-from trainers.mlp_trainer import MLP, MLPTrainer
-from trainers.cnn_trainer import CNN, CNNTrainer
+from training.mlp_trainer import MLP, MLPTrainer
+from training.cnn_trainer import CNN, CNNTrainer
 
 
 

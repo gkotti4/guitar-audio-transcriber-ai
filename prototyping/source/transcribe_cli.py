@@ -96,12 +96,13 @@ def main():
     # --- RESULTS
     labels = result["labels"]
     confs  = result["confidences"]
+    yin_info = result["dsp_info"]     # note to self: make shortcut
 
     # --- Print to console ---
-    for i, (lab, conf) in enumerate(zip(labels, confs)):
-        print(f"{i:03d}  {lab:>4}  (conf={conf:.2f})")
+    for i, (lab, conf, y_info) in enumerate(zip(labels, confs, yin_info)):
+        print(f"{i:03d}  {lab:>4}  (conf={conf:.2f})  {y_info[1]["note_name"]}")
     # --- Save to text file ---
-    if not save_results:
+    if save_results:
         with out_file.open("w", encoding="utf-8") as f:
             for i, (lab, conf) in enumerate(zip(labels, confs)):
                 f.write(f"{i},{lab},{conf:.4f}\n")
@@ -112,4 +113,5 @@ def main():
 
 
 if __name__ == "__main__":
+    print("\tTRANSCRIBE CLI — PROTO 0.0 ")
     main()

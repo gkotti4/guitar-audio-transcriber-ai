@@ -11,8 +11,8 @@ from sklearn.model_selection import train_test_split
 import torch
 import torchaudio as ta
 from torch.utils.data import Dataset, TensorDataset, DataLoader
-from config import *
-from dsp_algorithms.yin import YinDsp
+from source.config import *
+from source.dsp.yin import YinDsp
 
 
 def get_available_datasets(datasets_root):
@@ -42,19 +42,19 @@ def get_available_datasets(datasets_root):
     return all_names, all_paths
 
 
-# TODO: move to dedicated data/audio loading/processing file
+# TODO: move to dedicated data/audio loading/processing module
 class AudioDatasetLoader:
     def __init__(self,
                  dataset_roots: list[Path] | list[str],
                  target_sr: int = 11025,
                  mono: bool = True,
-                 test_size: float = 0.2,
+                 #test_size: float = 0.2,
                  duration: float | None = None
     ):
         self.dataset_roots = dataset_roots
         self.target_sr = target_sr
         self.mono = mono
-        self.test_size = test_size
+        #self.test_size = test_size
 
         if duration is not None:
             self.fixed_len = int(self.target_sr * duration)
@@ -259,7 +259,6 @@ class MelFeatureBuilder:
         mfcc_features,_,_,_ = self.extract_mfcc_features(
             audio_loader,
             mfcc_config["N_MFCC"],
-#            False, # depreciated
             mfcc_config["NORMALIZE_AUDIO_VOLUME"],
             mfcc_config["ADD_PITCH_FEATURES"],
         )
@@ -316,7 +315,7 @@ class MelFeatureBuilder:
             #if normalize_features: # depreciated - replaced by scaler
             #    mfcc_vec = (mfcc_vec - mfcc_vec.mean()) / (mfcc_vec.std() + 1e-6)
 
-            # --- TESTING: DSP pitch feature(s) ---
+            # --- NEW: DSP pitch feature(s) ---
             if add_pitch_features:
                 yin = YinDsp() # fmin=, fmax=
                 pitch_hz, note_info = yin.estimate_pitch(wave, audio_loader.target_sr)
@@ -457,7 +456,8 @@ class MelFeatureBuilder:
         y_encoded, num_classes, reverse_map = self._encode_labels_to_ints(y)
         y_encoded = np.array(y_encoded, dtype=int)
 
-        #print(f"Extracted Mel-spectrogram features for {X.shape[0]} samples. X shape: {tuple(X.shape)}")
+        print(f"Extracted Mel-spectrogram features for {X.shape[0]} samples. X shape: {tuple(X.shape)}")
+
         return X, y_encoded, num_classes, reverse_map
 
 
