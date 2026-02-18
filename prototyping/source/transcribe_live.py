@@ -16,9 +16,6 @@ import sounddevice as sd
 import soundfile as sf
 from enum import Enum
 
-### ----- VERSION NOTES ----- ###
-# Only supports .wav files
-### ------------------------- ###
 
 #class InferenceState(Enum):
 #    IDLE = 0
