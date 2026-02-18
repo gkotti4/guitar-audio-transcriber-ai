@@ -3,7 +3,7 @@ from numba.np.math.mathimpl import FLT_MIN
 
 from config import SLICER_CONFIG, TARGET_SR, CLIP_DURATION, INFERENCE_OUTPUT_ROOT
 from transcribe import Transcriber
-from audio_processing import audio_slicer
+from source.audio import audio_slicer
 import os, argparse
 import tempfile
 from pathlib import Path
