@@ -1,5 +1,6 @@
-# Audio & datasets
 data/
+
+# Audio & datasets
 Datasets/
 datasets/
 Samples/
@@ -17,6 +18,7 @@ Recordings/
 *.h5
 *.csv
 Model Data/
+checkpoints/
 
 # Python noise
 __pycache__/
@@ -31,3 +33,7 @@ venv/
 # OS files
 .DS_Store
 Thumbs.db
+
+
+# Version 1
+!version_1/
