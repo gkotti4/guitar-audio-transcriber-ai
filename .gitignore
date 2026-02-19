@@ -36,4 +36,6 @@ Thumbs.db
 
 
 # Version 1
-!version_1/
+!version_1/data/
+!version_1/data/checkpoints/
+!version_1/data/inference/
