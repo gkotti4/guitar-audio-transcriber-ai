@@ -21,9 +21,9 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 import sklearn.metrics as metrics
 
-from source.audio.loading import *
-from source.audio.features import *
-from source.config import CNNConfig
+from audio.loading import *
+from audio.features import *
+from config import CNNConfig
 
 
 
@@ -139,6 +139,7 @@ class CNN(nn.Module):
         return x
 
 
+'''
 class CNNTrainer():
     def __init__(
             self,
@@ -153,7 +154,7 @@ class CNNTrainer():
         self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
         self.model = model.to(self.device)
         self.model.apply(self._init_weights_kaiming)
-        self.loss_fn = nn.CrossEntropyLoss(label_smoothing=0.05)    # + label_smoothing (12/5)
+        self.loss_fn = nn.CrossEntropyLoss(label_smoothing=0.05)   
         self.optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=weight_decay)
         self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             self.optimizer,
@@ -161,7 +162,7 @@ class CNNTrainer():
             factor=0.5,
             patience=3,
             threshold=1e-4,
-        )   # + (12/5)
+        )   
         self.amp_scaler = None
 
         self._check_dims(train_dl)
@@ -172,7 +173,7 @@ class CNNTrainer():
         self.val_dl             = val_dl
         self.reverse_map        = reverse_map
         self.class_names        = [str(reverse_map[k]) for k in sorted(reverse_map)] if reverse_map else []
-        self.num_classes = len(self.class_names) # !...trusting reverse_map instead of train_dl/model...!
+        self.num_classes = len(self.class_names) 
 
         self.train_loss_history     = []
         self.train_accuracy_history = []
@@ -561,102 +562,9 @@ class CNNTrainer():
                 pass
 
         print(f"[load] Checkpoint loaded from {load_path}")
+'''    
         
         
-        
-
-'''
-def main(): # DEPRECIATING - MOVING TOWARDS TRAINING MANAGER
-    start_time = time.time()
-    #--- < CONFIG > ---
-    cnn_cfg = CNNConfig()
-    print("\nConfiguration Values: ")
-    for k, v in asdict(cnn_cfg).items():
-        print(f" -\t{k}: {v}")
-
-
-    # Get available datasets
-    dataset_names, dataset_paths = get_available_datasets(datasets_root=cnn_cfg.DATASETS_ROOT)
-    print("Available datasets:", *dataset_names, sep="\n", end="\n\n")
-    dataset_index = int(input(f"Enter dataset index (0 to {len(dataset_names)-1}): "))
-    selected_dataset_path = dataset_paths[dataset_index]
-    print(f"Selected dataset: {selected_dataset_path}\n")
-
-    last_time = time.time()
-
-
-    # --- build audio loader
-    audio_dataset_loader = AudioDatasetLoader(selected_dataset_path, target_sr=cnn_cfg.TARGET_SR)
-
-    # --- feature extraction
-    builder = MelFeatureBuilder()
-
-    train_dl, val_dl, X, y_encoded, num_classes, reverse_map = builder.build_melspec_train_val_dataloaders(
-        audio_loader=audio_dataset_loader,
-        n_mels=cnn_cfg.N_MELS,
-        n_fft=cnn_cfg.N_FFT,
-        hop_length=cnn_cfg.HOP_LENGTH,
-        batch_size=cnn_cfg.BATCH_SIZE,
-        val_size=0.2,
-        shuffle_train=True,
-        shuffle_val=False,
-        normalize_audio_volume=cnn_cfg.NORMALIZE_AUDIO_VOLUME,
-        #normalize_features=cnn_cfg.NORMALIZE_FEATURES,
-        #standard_scaler=cnn_cfg.STANDARD_SCALER,
-        seed=42,
-        num_workers=0,
-        pin_memory=True,
-        drop_last=False
-    )
-    # -- data reports
-    # builder._mfcc_report()
-    # builder._audio_report()
-
-    print(f"audio loading & feature extraction time: {time.time() - last_time:.2f}s \n")
-
-
-    xb,_ = next(iter(train_dl))
-    num_features = xb.shape[1]
-    print("num_features:", num_features)
-    print("num_classes:", num_classes)
-    print("class_labels:", [str(lbl) for lbl in reverse_map.values()])
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"device: {device}\n")
-
-
-    # Model and Trainer setup
-    model = CNN(num_classes, base_channels=cnn_cfg.BASE_CHANNELS, num_blocks=cnn_cfg.NUM_BLOCKS, hidden_dim=cnn_cfg.HIDDEN_DIM, dropout=cnn_cfg.DROPOUT, kernel_size=cnn_cfg.KERNEL_SIZE)
-    trainer = CNNTrainer(model, train_dl, val_dl, reverse_map=reverse_map, device=device, lr=cnn_cfg.LR)
-
-    print(f"Full setup time: {time.time() - start_time:.2f}s\n")
-    last_time = time.time()
-
-    # - Load
-    if cnn_cfg.LOAD_CHECKPOINT:
-        try:
-            trainer.load()
-        except Exception as e:
-            print("Failed to load checkpoint: ", e)
-
-    # - Train
-    trainer.train(cnn_cfg.EPOCHS, es_window_len=cnn_cfg.ES_WINDOW_LEN, es_slope_limit=cnn_cfg.ES_SLOPE_LIMIT, max_clip_norm=cnn_cfg.MAX_CLIP_NORM, use_amp=cnn_cfg.USE_AMP)
-
-    # - Evaluate
-    # ...
-
-    # - Save
-    if cnn_cfg.SAVE_CHECKPOINT:
-        trainer.save(config=cnn_cfg)
-
-    print(f"Training time: {time.time() - last_time:.2f}s\n")
-
-    print("\n--- cnn_trainer execution complete ---\n")
-if __name__ == "__main__":
-    #main()
-    pass
-'''
-
 
 
 

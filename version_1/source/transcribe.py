@@ -10,10 +10,10 @@ from tkinter import filedialog, messagebox
 
 import librosa
 
-from source.config import *
-from source.audio.loading import AudioDatasetLoader, get_available_datasets
-from source.audio.features import MelFeatureBuilder
-from source.audio.slicing import AudioSlicer
+from config import *
+from audio.loading import AudioDatasetLoader, get_available_datasets
+from audio.features import MelFeatureBuilder
+from audio.slicing import AudioSlicer
 from dsp.yin import YinDsp
 from note_predictor import NotePredictor
 
@@ -79,9 +79,8 @@ class Transcriber:
         audio_path: Path | str,
         out_root: Path | str = INFERENCE_OUTPUT_ROOT,
         audio_name: str = "transcribe_audio",
-        target_sr: int = TARGET_SR, # NOTE: MUST BE SAME VALUE USED IN TRAINING
-        clip_duration: float = CLIP_DURATION, # NOTE: MUST BE SAME VALUE USED IN TRAINING
-        #save_clips_to_disk: bool = False,
+        target_sr: int = TARGET_SR, 
+        clip_duration: float = CLIP_DURATION, 
     ) -> dict:
         """
         Run full transcription on a single audio file.
@@ -94,7 +93,7 @@ class Transcriber:
 
         timestamp = datetime.now().strftime("%m-%d_%H-%M-%S")
 
-        loader_root = out_root / f"{audio_name}_{timestamp}"  # used by AudioDatasetLoader
+        loader_root = out_root / f"{audio_name}_{timestamp}" 
         out_dir = loader_root / audio_name
         out_dir.mkdir(exist_ok=True, parents=True)
 
@@ -131,12 +130,10 @@ class Transcriber:
 
         # ---- 4. Predict note labels ----
         result = self.predictor.predict(mfcc_features, melspec_features)
-        #result = self.predictor.predict_debug([1.0, 0.75, 0.5, 0.25, 0.0], mfcc_features, melspec_features) # TODO: Remove after DEBUGGING
 
-        # ---- 5. Optional: map to TAB (future step)
-        # TODO: call tab-mapping engine here
+        # ---- 5. Optional: map to TAB HTML
 
-        # ---- 6. DSP testing (YIN pitch estimation) ----
+        # ---- 6. Baseline DSP (YIN pitch estimation) ----
         result["dsp_info"] = []
         wavs, _, _, _ = audio_loader.load_audio_dataset()
         yin = YinDsp()
@@ -147,9 +144,6 @@ class Transcriber:
         return result
 
 
-
-
-    # Note: renamed from transcribe_audio to transcribe_note to emphasize single slice transcription
     def transcribe_note(
             self,
             audio: np.ndarray,
@@ -188,8 +182,6 @@ class Transcriber:
             audio = z
         elif audio_len > target_len:
             audio = audio[:target_len]
-        #del audio_len, target_len
-
 
         # ---- 1. Extract features using *checkpoint* configs ----
         mfcc_features, melspec_features = self.feature_builder.extract_inference_features_from_audio(
@@ -206,39 +198,3 @@ class Transcriber:
 
         return result
 
-
-
-def main():
-    pass
-"""    # minimal TK root (hidden)
-    root = tk.Tk()
-    root.withdraw()
-
-    file_path = filedialog.askopenfilename(
-        title="Select guitar audio file",
-        filetypes=(("WAV files", "*.wav"), ("All files", "*.*")),
-    )
-    if not file_path:
-        messagebox.showerror("Error", "No file selected.")
-        return
-
-    in_audio_path = Path(file_path)
-    audio_name = in_audio_path.stem
-    out_audio_root = INFERENCE_CLIPS_ROOT / "Transcriber"
-
-    transcriber = Transcriber()
-    result = transcriber.transcribe(in_audio_path, out_audio_root, audio_name, target_sr=TARGET_SR, clip_len=CLIP_LENGTH)
-
-    print(" ".join(str(x) for x in result["labels"]))
-    print(" ".join(f"{x:.2f}" for x in result["confidences"]))
-    print(" ".join(f"{x[1]["midi"], x[1]["note_name"]}" for x in result["dsp_info"]))
-
-    for (x, m) in zip(result["labels"], result["dsp_info"]):
-        print(x, m[1]["note_name"])
-
-    print("\nTranscriber finished.\n")"""
-
-    
-
-if __name__ == "__main__":
-    main()

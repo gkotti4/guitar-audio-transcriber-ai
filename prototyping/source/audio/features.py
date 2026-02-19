@@ -1,10 +1,8 @@
-# audio_preprocessing.py
+# features.py
 import os, json
-from dataclasses import dataclass
 import librosa
 import librosa.display
 import librosa.feature
-import math
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
@@ -12,110 +10,8 @@ import torch
 import torchaudio as ta
 from torch.utils.data import Dataset, TensorDataset, DataLoader
 from source.config import *
+from source.audio.loading import get_available_datasets, AudioDatasetLoader
 from source.dsp.yin import YinDsp
-
-
-def get_available_datasets(datasets_root):
-    datasets_root = Path(datasets_root)
-    if not datasets_root.exists():
-        print(f"[get_available_datasets] Dataset directory not found: {datasets_root}")
-        return [], []
-
-    all_names = []
-    all_paths = []
-
-    # iterate over first-level dirs (kaggle/, personal/, etc.)
-    for subroot in sorted(datasets_root.iterdir()):
-        if not subroot.is_dir() or subroot.name.startswith('.'):
-            continue
-
-        # iterate over datasets inside each subroot
-        for ds in sorted(subroot.iterdir()):
-            if ds.is_dir() and not ds.name.startswith('.'):
-                label = f"{subroot.name}/{ds.name}"
-                all_names.append(label)
-                all_paths.append(ds)
-
-    if not all_names:
-        print(f"[get_available_datasets] No datasets found under {datasets_root}")
-
-    return all_names, all_paths
-
-
-# TODO: move to dedicated data/audio loading/processing module
-class AudioDatasetLoader:
-    def __init__(self,
-                 dataset_roots: list[Path] | list[str],
-                 target_sr: int = 11025,
-                 mono: bool = True,
-                 #test_size: float = 0.2,
-                 duration: float | None = None
-    ):
-        self.dataset_roots = dataset_roots
-        self.target_sr = target_sr
-        self.mono = mono
-        #self.test_size = test_size
-
-        if duration is not None:
-            self.fixed_len = int(self.target_sr * duration)
-        else:
-            self.fixed_len = None
-
-    def fix_len(self, y: np.ndarray, fixed_len=None) -> np.ndarray:
-        if fixed_len is None:
-            return y
-
-        L = len(y)
-        N = fixed_len
-
-        if L > N:
-            # trim
-            return y[:N]
-        elif L < N:
-            # pad with zeros
-            pad_width = N - L
-            return np.pad(y, (0, pad_width), mode="constant")
-        else:
-            # exactly the right length
-            return y
-
-    def _iter_audio(self):
-        for i in range(len(self.dataset_roots)):
-            for folder in os.listdir(self.dataset_roots[i]):
-                folder_path = os.path.join(self.dataset_roots[i], folder)
-                if not os.path.isdir(folder_path):
-                    continue
-
-                label = folder # Note: recent change
-
-                for fname in os.listdir(folder_path):
-                    if not fname.endswith(".wav"):
-                        continue
-                    path = os.path.join(folder_path, fname)
-                    x_raw, sr = librosa.load(path, sr=self.target_sr, mono=self.mono)
-                    x_raw_fixed = self.fix_len(x_raw, self.fixed_len)
-                    yield x_raw_fixed, sr, label, path
-
-    def load_audio_dataset(self, pad_to_max=True):
-        wavs, srs, labels, paths = [], [], [], []
-
-        for y_raw, sr, label, path in self._iter_audio():
-            wavs.append(y_raw)
-            srs.append(sr)
-            labels.append(label)
-            paths.append(path)
-
-        if len(wavs) == 0:
-            raise FileNotFoundError("load_audio_dataset: No audio files found.")
-            #print("WARNING: load_audio_dataset: No audio files found.")
-            #return [], [], [], []
-
-        if pad_to_max:
-            # wavs = [np.ndarray(), np.ndarray(), ...]
-            max_len = max(len(w) for w in wavs)
-            wavs = [np.pad(w, (0, max_len - len(w)), mode="constant") for w in wavs]
-
-        return wavs, srs, labels, paths
 
 
 class MelFeatureBuilder:
@@ -629,73 +525,3 @@ class MelFeatureBuilder:
 
         return mfcc_features, melspec_features
 
-
-
-
-
-
-
-
-
-''' --- DEPRECIATED OR PREVIOUS ITERATION/VERSION METHODS --- '''
-'''
-    def build_train_val_dataloaders(
-            self,
-            X, y_encoded,
-            batch_size: int = 32,
-            val_size: float = 0.2,
-            shuffle_train: bool = True,
-            shuffle_val: bool = False,
-            standard_scaler: bool = True,
-            seed: int = 42,
-            num_workers: int = 0,
-            pin_memory: bool = True,
-            drop_last: bool = False
-    ):
-        """
-        Generic train/val DataLoaders.
-        """
-
-        X = np.asarray(X)
-        y_encoded = np.asarray(y_encoded, dtype=int)
-
-        # 2) stratified split
-        X_tr, X_val, y_tr, y_val = train_test_split(
-            X, y_encoded,
-            test_size=val_size,
-            stratify=y_encoded,
-            random_state=seed,
-        )
-
-        if standard_scaler and X.ndim == 2:
-            scaler = StandardScaler().fit(X_tr)
-            X_tr = scaler.transform(X_tr)
-            X_val = scaler.transform(X_val)
-            self.scaler = scaler
-        else:
-            scaler = None
-
-        # 3) datasets
-        ds_tr = self._create_tensor_dataset(X_tr, y_tr)
-        ds_val = self._create_tensor_dataset(X_val, y_val)
-
-        # 4) loaders
-        dl_tr = DataLoader(
-            ds_tr, batch_size=batch_size, shuffle=shuffle_train,
-            num_workers=num_workers, pin_memory=pin_memory, drop_last=drop_last
-        )
-        dl_val = DataLoader(
-            ds_val, batch_size=batch_size, shuffle=shuffle_val,
-            num_workers=num_workers, pin_memory=pin_memory, drop_last=False
-        )
-
-        return dl_tr, dl_val, scaler
-'''
-'''def build_mfcc_dataloader(self, audio_loader, n_mfcc=13, batch_size: int = 32, shuffle: bool = True, normalize_audio_volume=True): # must be updated (check function parameters)
-    """
-    MFCC-only DataLoader (for MLP).
-    """
-    X, y_encoded, num_classes, reverse_map = self.extract_mfcc_features(audio_loader, n_mfcc, normalize_audio_volume)
-    dataset = self._create_tensor_dataset(X, y_encoded)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
-    return dataloader, num_classes, reverse_map'''

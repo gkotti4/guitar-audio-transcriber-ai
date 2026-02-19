@@ -1,6 +1,6 @@
 # transcribe_cli.py
-from source.config import TARGET_SR, CLIP_DURATION, INFERENCE_OUTPUT_ROOT
-from source.transcribe import Transcriber
+from config import TARGET_SR, CLIP_DURATION, INFERENCE_OUTPUT_ROOT
+from transcribe import Transcriber
 import os, argparse
 import tempfile
 from pathlib import Path
@@ -99,6 +99,8 @@ def main():
     yin_info = result["dsp_info"]     # note to self: make shortcut
 
     # --- Print to console ---
+    print("\nTranscription Results:")
+    print("Idx |  Label |  Confidence | (YIN Note Estimate)")
     for i, (lab, conf, y_info) in enumerate(zip(labels, confs, yin_info)):
         print(f"{i:03d}  {lab:>4}  (conf={conf:.2f})  {y_info[1]["note_name"]}")
     # --- Save to text file ---
@@ -113,5 +115,5 @@ def main():
 
 
 if __name__ == "__main__":
-    print("\tTRANSCRIBE CLI — PROTO 0.0 ")
+    print("\t- TRANSCRIBE CLI - Base Version 1.0 -\n")
     main()

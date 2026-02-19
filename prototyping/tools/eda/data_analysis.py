@@ -14,14 +14,14 @@ import soundfile as sf
 from matplotlib import pyplot as plt
 import seaborn as sns
 
+import source.config as config
+from source.audio.loading import AudioDatasetLoader, get_available_datasets
+
 
 PROJECT_ROOT = Path.cwd().parent.parent # prototyping/
 SOURCE_ROOT = PROJECT_ROOT / "source"
 AUDIO_PROCESSING_ROOT = SOURCE_ROOT / "audio_processing"
 
-
-import source.config as config
-from source.audio.audio_preprocessing import AudioDatasetLoader, get_available_datasets
 
 
 # - DATASET ANALYSIS
@@ -63,17 +63,16 @@ def dataset_analysis():
     #pprint(counts)
 
     # plot bar chart for counts
-    if False:
-        print("\n\t| Label Distribution |")
-        input("\nHit enter to continue...")
-        plt.figure(figsize=(12,4))
-        plt.bar(unique, values)
-        plt.xticks(rotation=90)
-        plt.xlabel("Label")
-        plt.ylabel("Count")
-        plt.title("Label Distribution")
-        plt.tight_layout()
-        plt.show()
+    print("\n\t| Label Distribution |")
+    input("\nHit enter to continue...")
+    plt.figure(figsize=(12,4))
+    plt.bar(unique, values)
+    plt.xticks(rotation=90)
+    plt.xlabel("Label")
+    plt.ylabel("Count")
+    plt.title("Label Distribution")
+    plt.tight_layout()
+    plt.show()
 
     print("\n\t| Stats |")
 
@@ -106,7 +105,7 @@ def dataset_analysis():
 # - SLICE ANALYSIS
 def slice_analysis():
     print("\n\t| Inference Slices Analysis |")
-    import source.audio.audio_slicer as audio_slicer
+    import source.audio.slicing as slicing
     import tempfile
     import tkinter as tk
     from tkinter import filedialog, messagebox
@@ -132,7 +131,7 @@ def slice_analysis():
 
         save_dir = Path(tmpdir) / "unknown"
 
-        slicer = audio_slicer.AudioSlicer()
+        slicer = slicing.AudioSlicer()
 
         slicer.sliceNsave(
                 audio_path,

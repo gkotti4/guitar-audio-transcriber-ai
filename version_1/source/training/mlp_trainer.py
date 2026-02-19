@@ -21,9 +21,9 @@ from sklearn.preprocessing import StandardScaler
 import sklearn.metrics as metrics
 import matplotlib.pyplot as plt
 
-from source.config import MLPConfig
-from source.audio.loading import *
-from source.audio.features import *
+from config import MLPConfig
+from audio.loading import *
+from audio.features import *
 
 
 
@@ -32,7 +32,6 @@ from source.audio.features import *
 class MLP(nn.Module):
     # num_features: number of input features
     # hidden_dim: number of neurons in the first hidden layer
-
     def __init__(self, num_features, hidden_dim, num_hidden_layers, num_classes, dropout = 0.1):
         super().__init__()
 
@@ -55,12 +54,12 @@ class MLP(nn.Module):
             dims.append(next_dim)
 
         # first hidden layer
-        layers.append(nn.Linear(num_features, dims[0]))     # dense layer - fully connected layer (computes WX + b)
-        layers.append(nn.LayerNorm(dims[0]))                # normalize each row across its out_dim features independently (row-wise normalization)
-        #layers.append(nn.BatchNorm1d(dims[0]))             # normalize each of the out_dim columns across all in_dim rows (column-wise, batch-dependent)
-        layers.append(nn.LeakyReLU(0.1))                    # activation: f(x) = x if x>0, else 0.01*x (keeps small gradient for negatives)
+        layers.append(nn.Linear(num_features, dims[0]))     
+        layers.append(nn.LayerNorm(dims[0]))                
+        #layers.append(nn.BatchNorm1d(dims[0]))             
+        layers.append(nn.LeakyReLU(0.1))                    
         if dropout > 0:
-            layers.append(nn.Dropout(dropout))              # randomly sets `dropout%` of activations to 0 during training, scales the rest
+            layers.append(nn.Dropout(dropout))              
 
 
         # hidden layers
@@ -78,7 +77,7 @@ class MLP(nn.Module):
 
         #print("MLP model created: \n", self.net, end="\n\n")
 
-    def create_model(self, num_features, hidden_dims: list, num_classes, dropout = 0.0): # since we can't overload __init__
+    def create_model(self, num_features, hidden_dims: list, num_classes, dropout = 0.0): 
         if not hidden_dims:
             raise ValueError("[__init__] hidden_dims does not contain any elements")
 
@@ -106,7 +105,7 @@ class MLP(nn.Module):
         return self.net(x)
 
 
-
+'''
 class MLPTrainer():
     def __init__(
             self,
@@ -512,103 +511,8 @@ class MLPTrainer():
         self.epoch                      = ckpt.get("epoch", 0)
 
         print(f"[load] Checkpoint loaded from {load_path}")
-    
+'''    
 
-
-
-'''
-def main(): # DEPRECIATING - MOVING TO TRAINING MANAGER
-    start_time = time.time()
-    # --- config
-    mlp_cfg = MLPConfig()
-    print("\nConfiguration Values: ")
-    for k, v in asdict(mlp_cfg).items():
-        print(f" -\t{k}: {v}")
-
-
-    # Get available datasets
-    dataset_names, dataset_paths = get_available_datasets(datasets_root=mlp_cfg.DATASETS_ROOT)
-    print("Available datasets:", *dataset_names, sep="\n", end="\n\n")
-    dataset_index = int(input(f"Enter dataset index (0 to {len(dataset_names)-1}): "))
-    selected_dataset_path = dataset_paths[dataset_index]
-    print(f"Selected dataset: {selected_dataset_path}\n")
-
-    last_time = time.time()
-
-
-    # --- build audio loader
-    audio_dataset_loader = AudioDatasetLoader(selected_dataset_path, target_sr=mlp_cfg.TARGET_SR)
-
-    # --- feature extraction
-    builder = MelFeatureBuilder()
-    
-    train_dl, val_dl, X, y_encoded, num_classes, reverse_map, scaler = builder.build_mfcc_train_val_dataloaders(
-        audio_loader=audio_dataset_loader,
-        n_mfcc=mlp_cfg.N_MFCC,
-        batch_size=mlp_cfg.BATCH_SIZE,
-        val_size=0.2,
-        shuffle_train=True,
-        shuffle_val=False,
-        normalize_audio_volume=mlp_cfg.NORMALIZE_AUDIO_VOLUME,
-        normalize_features=mlp_cfg.NORMALIZE_FEATURES,
-        standard_scaler=mlp_cfg.STANDARD_SCALER,
-        seed=42,
-        num_workers=0,
-        pin_memory=True,
-        drop_last=False
-    )
-    # -- data reports
-    #builder._mfcc_report()
-    #builder._audio_report()
-
-    print(f"audio loading & feature extraction time: {time.time() - last_time:.2f}s \n")
-
-
-    xb,_ = next(iter(train_dl))
-    num_features = xb.shape[1]
-    print("num_features:", num_features)
-    print("num_classes:", num_classes)
-    print("class_labels:", [str(lbl) for lbl in reverse_map.values()])
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"device: {device}\n")
-
-
-    # --- model and trainer setup
-    model = MLP(num_features, hidden_dim=mlp_cfg.HIDDEN_DIM, num_hidden_layers=mlp_cfg.NUM_HIDDEN_LAYERS, num_classes=num_classes, dropout=mlp_cfg.DROPOUT)
-    trainer = MLPTrainer(model, train_dl, val_dl, reverse_map=reverse_map, device=device, lr=mlp_cfg.LR, scaler=scaler)
-
-
-    print(f"Full setup time: {time.time() - start_time:.2f}s\n")
-    last_time = time.time()
-
-    # --- load
-    if mlp_cfg.LOAD_CHECKPOINT:
-        try:
-            trainer.load()
-        except Exception as e:
-            print("Failed to load checkpoint: ", e)
-
-
-    # --- training
-    trainer.train(epochs=mlp_cfg.EPOCHS, es_window_len=mlp_cfg.ES_WINDOW_LEN, es_slope_limit=mlp_cfg.ES_SLOPE_LIMIT, max_clip_norm=mlp_cfg.MAX_CLIP_NORM)
-
-
-    # --- evaluation
-    #trainer.evaluate(cm=True, report=True, plot_metrics=True)
-
-
-    # --- save
-    if mlp_cfg.SAVE_CHECKPOINT:
-        trainer.save(config=mlp_cfg)
-
-    print(f"Training time: {time.time() - last_time:.2f}s\n")
-
-    print("\n--- mlp_trainer execution complete ---\n")
-if __name__ == "__main__":
-    #main()
-    pass
-'''
 
 
 

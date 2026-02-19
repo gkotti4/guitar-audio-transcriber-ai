@@ -12,14 +12,15 @@ import scipy as sp
 from matplotlib import pyplot as plt
 import seaborn as sns
 
+import source.config as config
+from source.audio.loading import AudioDatasetLoader, get_available_datasets
+
 
 PROJECT_ROOT = Path.cwd().parent.parent # prototyping/
 SOURCE_ROOT = PROJECT_ROOT / "source"
 AUDIO_PROCESSING_ROOT = SOURCE_ROOT / "audio_processing"
 
 
-import source.config as config
-from source.audio.audio_preprocessing import AudioDatasetLoader, get_available_datasets
 
 
 # - FEATURE ANALYSIS

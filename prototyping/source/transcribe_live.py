@@ -1,9 +1,8 @@
 # transcribe_live.py
-from numba.np.math.mathimpl import FLT_MIN
-
-from config import SLICER_CONFIG, TARGET_SR, CLIP_DURATION, INFERENCE_OUTPUT_ROOT
-from transcribe import Transcriber
-from source.audio import audio_slicer
+#   EXPERIMENTAL
+from source.config import SLICER_CONFIG, TARGET_SR, CLIP_DURATION, INFERENCE_OUTPUT_ROOT
+from source.transcribe import Transcriber
+from source.audio import slicing
 import os, argparse
 import tempfile
 from pathlib import Path
@@ -30,12 +29,12 @@ from enum import Enum
 '''
 
 
+start_time = time.time()
+
 def rms_db(x: np.ndarray, eps=1e-12):
     # x: float32 audio [-1, 1]
     r = np.sqrt(np.mean(x * x) + eps)
     return 20.0 * np.log10(r + eps)
-
-
 
 
 
@@ -78,7 +77,7 @@ class RingBuffer():
             self.ring.pop() # or append(zeros)
         #del self.ring[:idx]
 
-class LiveMic:
+class LiveTranscriber:
     def __init__(self, device=None, buffer_duration=1.5, sample_rate=TARGET_SR, channels=1, blocksize=1024):
         self.device = device
         self.buffer_duration = buffer_duration
@@ -89,8 +88,11 @@ class LiveMic:
         self.buffer = RingBuffer(maxlen=self.buffer_maxlen)
         self.note_q = queue.Queue(maxsize=2)
 
+        self.transcriber = Transcriber()
+        print(f"... live initialized: {time.time()-start_time} ...")
+
     def detect_onsets(self, y):
-        onsets = audio_slicer.AudioSlicer.detect_onsets(y, self.sample_rate, hop_len=(256*4), min_sep=0.3)
+        onsets = slicing.AudioSlicer.detect_onsets(y, self.sample_rate, hop_len=(256*4), min_sep=0.3)
         return onsets
 
     @staticmethod
@@ -98,6 +100,17 @@ class LiveMic:
         if len(y) < i or len(y) < j:
             return np.zeros((0,), dtype=np.float32)
         return np.array(y[i:j], dtype=np.float32)
+
+    @staticmethod
+    def pad_or_trim_audio(y: np.ndarray, target_dur: float, sr: int) -> np.ndarray:
+        target_len = int(target_dur * sr)
+        out_y = np.zeros(target_len, y.dtype)
+        if len(y) > target_len:
+            out_y = y[:target_len]
+        elif len(y) < target_len:
+            out_y = np.pad(y, (0, target_len - len(y)))
+
+        return out_y
 
     def live(self):
         last_t = time.time()
@@ -135,7 +148,7 @@ class LiveMic:
                 #self.buffer.clear()
                 '''
 
-        print("Listening to mic...Press Ctrl+C to stop.")
+
         with sd.InputStream(
             samplerate=self.sample_rate,
             channels=self.channels,
@@ -143,6 +156,8 @@ class LiveMic:
             callback=callback,
             dtype="float32"
         ):
+            print("Listening to mic...Press Ctrl+C to stop.")
+            print(f"... listening start time: {time.time()-start_time} ...")
             # Main Thread 1
             min_slice_t = 0.3 # seconds # MIN_SEP in config?
             min_slice_len = (min_slice_t * self.sample_rate) # index range
@@ -162,6 +177,7 @@ class LiveMic:
                             if len(onsets) == 1:
                                 s = self.slice_from(buf, onsets[0], -1)
                                 if len(s) > min_slice_len:
+                                    s = self.pad_or_trim_audio(s, CLIP_DURATION, self.sample_rate)
                                     self.note_q.put_nowait(s)
                                     h_idx = onsets[0]
                                     del onsets[:]
@@ -169,6 +185,7 @@ class LiveMic:
                             while len(onsets) >= 2:
                                 s = self.slice_from(buf, onsets[0], onsets[1])
                                 if len(s) > min_slice_len:
+                                    s = self.pad_or_trim_audio(s, CLIP_DURATION, self.sample_rate)
                                     self.note_q.put_nowait(s)
                                     h_idx = onsets[1]
                                     del onsets[:2]
@@ -177,10 +194,6 @@ class LiveMic:
                                     del onsets[:1]
 
                             self.buffer.clear_from(h_idx+1)
-
-
-
-
 
 
                             # PROTO send to queue, send entire buffer, let inference onset slicing work
@@ -194,61 +207,67 @@ class LiveMic:
                         try:
                             note = self.note_q.get_nowait()
                             if note is not None and len(note) > 0:
-                                inference(np.array(note, dtype=np.float32, copy=False), self.sample_rate) # redundant check np.array()
+                                self.inference(np.array(note, dtype=np.float32, copy=False), self.sample_rate) # redundant check np.array()
+
                         except queue.Empty:
                             pass
-
                         time.sleep(0.1)
 
                     except queue.Empty:
                         pass
             except KeyboardInterrupt:
                 print("Stopping live mic...")
+            except Exception as e:
+                print(f"Exception: {e}")
 
 
-def inference(audio: np.ndarray, sr_in = TARGET_SR):
-    print("audio:", audio.size, "min/max:", float(audio.min()), float(audio.max()))
-    print("first", audio[0], "last", audio[-1])
 
-    if audio is None or len(audio) == 0:
-        print("[inference] No audio provided.")
-        return
+    def inference(self, audio: np.ndarray, sr_in = TARGET_SR):
+        if audio is None or len(audio) == 0:
+            print("[inference] No audio provided.")
+            return
+        #if len(audio) < int(CLIP_DURATION * TARGET_SR):
+        #    print(f"[inference] Audio too short. Must be {CLIP_DURATION:.2f} seconds.")
+        #    return
 
-    # check audio length - must be min duration
-    min_samples = int(CLIP_DURATION * sr_in)
-    if audio.size < min_samples:
-        return
+        print("audio:", audio.size, "min/max:", float(audio.min()), float(audio.max()))
+        print("first", audio[0], "last", audio[-1])
 
-    # optional: skip silence
-    if audio_slicer.AudioSlicer.is_slice_loud_enough(audio):
-        print("[inference] clip not loud enough.")
-        #return
+        # check audio length - must be min duration
+        min_samples = int(CLIP_DURATION * sr_in)
+        if audio.size < min_samples:
+            return
 
+        # optional: skip silence
+        if audio_slicer.AudioSlicer.is_slice_loud_enough(audio):
+            print("[inference] clip not loud enough.")
+            #return
 
-    transcriber = Transcriber()
-    result = None
+        #transcriber = Transcriber()
+        result = None
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir = Path(tmpdir)
-        temp_path = tmpdir / "live_audio.wav"
-        sf.write(temp_path, audio, TARGET_SR)
-        # temp directory used ONLY for sliced clips
-        result = transcriber.transcribe_audio(
-            audio,
-            clip_duration=CLIP_DURATION,
-            sr_in=sr_in,
-        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            temp_path = tmpdir / "live_audio.wav"
+            sf.write(temp_path, audio, TARGET_SR)
+            # temp directory used ONLY for sliced clips
+            result = self.transcriber.transcribe_note(
+                audio,
+                clip_duration=CLIP_DURATION,
+                sr_in=sr_in,
+            )
 
-    # --- RESULTS
-    labels = result["labels"]
-    confs  = result["confidences"]
+        # --- RESULTS
+        labels = result["labels"]
+        confs  = result["confidences"]
 
-    # --- Print to console ---
-    for i, (lab, conf) in enumerate(zip(labels, confs)):
-        print(f"{i:03d}  {lab:>4}  (conf={conf:.2f})")
+        # --- Print to console ---
+        for i, (lab, conf) in enumerate(zip(labels, confs)):
+            print(f"{i:03d}  {lab:>4}  (conf={conf:.2f})")
 
 if __name__ == "__main__":
-    listener = LiveMic()
+    print(f"... program start: {time.time()-start_time} ...")
+    listener = LiveTranscriber()
     listener.live()
 
 

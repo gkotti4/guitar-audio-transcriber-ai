@@ -1,4 +1,4 @@
-# audio_slicer.py
+# slicing.py
 import os, time
 from datetime import datetime
 from pathlib import Path

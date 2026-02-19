@@ -4,11 +4,12 @@ from datetime import datetime
 from pathlib import Path
 from dataclasses import asdict
 
-from config import *
-from audio.audio_preprocessing import *
+from source.config import *
+from source.audio.loading import *
+from source.audio.features import *
 
-from training.mlp_trainer import MLP, MLPTrainer
-from training.cnn_trainer import CNN, CNNTrainer
+from source.training.mlp_trainer import MLP, MLPTrainer
+from source.training.cnn_trainer import CNN, CNNTrainer
 
 
 

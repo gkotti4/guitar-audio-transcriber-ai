@@ -1,0 +1,509 @@
+# features.py
+import os, json
+import librosa
+import librosa.display
+import librosa.feature
+import numpy as np
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+import torch
+import torchaudio as ta
+from torch.utils.data import Dataset, TensorDataset, DataLoader
+from config import *
+from audio.loading import get_available_datasets, AudioDatasetLoader
+from dsp.yin import YinDsp
+
+
+class MelFeatureBuilder:
+    def __init__(self):
+        pass
+
+    # ---------------------------------------------------------------------
+    # Reports
+    # ---------------------------------------------------------------------
+    def _audio_report(self, audio_loader, y_encoded, reverse_map, sample_paths: bool = False, example_limit_per_class: int = 3):
+        report = {}
+        # Use pad_to_max=False to inspect real durations
+        wavs, srs, labels, paths = audio_loader.load_audio_dataset(pad_to_max=False) 
+
+        if len(wavs) > 0:
+            lengths = [len(w) / sr for w, sr in zip(wavs, srs)]
+
+            report['target_sr']     = audio_loader.target_sr
+            report['duration_min']  = float(np.min(lengths))
+            report['duration_mean'] = float(np.mean(lengths))
+            report['duration_max']  = float(np.max(lengths))
+            report['unique_srs']    = sorted(list(set(srs)))
+        else:
+            report['target_sr']     = audio_loader.target_sr
+            report['duration_min']  = None
+            report['duration_mean'] = None
+            report['duration_max']  = None
+            report['unique_srs']    = []
+
+        if sample_paths: # and y_encoded is not None and reverse_map is not None:
+            report['example_paths'] = {}
+            classes, _ = np.unique(y_encoded, return_counts=True)
+            for c in classes:
+                idxs = np.where(y_encoded == c)[0][:example_limit_per_class]
+                report['example_paths'][reverse_map[int(c)]] = [paths[i] for i in idxs]
+
+        print("--- Audio Data Report ---")
+        print(json.dumps(report, indent=4, sort_keys=True))
+
+        return report
+
+    def _mfcc_report(self, X, y_encoded, reverse_map=None, scaler=None, out_root=None, out_filename=None, print_report: bool = True):
+        # Convert X to numpy array safely
+        if isinstance(X, torch.Tensor):
+            X_np = X.detach().cpu().numpy()
+        else:
+            X_np = np.asarray(X)
+
+        report = {}
+        n = X_np.shape[0]
+
+        report['n_samples']    = int(n)
+        report['feature_shape'] = list(X_np.shape[1:])              # remaining dims
+        report['num_features'] = int(np.prod(X_np.shape[1:]))       # flattened size
+
+        classes, counts = np.unique(y_encoded, return_counts=True)
+        report['num_classes'] = int(len(classes))
+
+        if reverse_map is not None:
+            report['per_class_counts'] = {
+                reverse_map[int(c)]: int(cnt) for c, cnt in zip(classes, counts)
+            }
+
+        # feature sanity
+        report['X_nan_frac'] = float(np.isnan(X_np).mean())
+        report['X_inf_frac'] = float(np.isinf(X_np).mean())
+        report['X_min']      = float(np.nanmin(X_np))
+        report['X_max']      = float(np.nanmax(X_np))
+        report['X_mean']     = float(np.nanmean(X_np))
+        report['X_std']      = float(np.nanstd(X_np))
+
+        # scaler info if present (MFCC + MLP)
+        if scaler is not None:
+            report['scaler_mean']  = scaler.mean_.tolist()
+            report['scaler_scale'] = scaler.scale_.tolist()
+
+        # write to file
+        if out_root is not None and out_filename is not None:
+            os.makedirs(out_root, exist_ok=True)
+            out_path = os.path.join(out_root, out_filename)
+            with open(out_path, 'w') as f:
+                json.dump(report, f, indent=2)
+
+        if print_report:
+            print("--- Feature Data Report (MFCC or Mel-spec) ---")
+            print(json.dumps(report, indent=4, sort_keys=True))
+
+        return report
+
+    # ---------------------------------------------------------------------
+    # Shared helpers
+    # ---------------------------------------------------------------------
+    def _encode_labels_to_ints(self, labels):
+        classes = sorted(set(labels))  # unique label names
+        label_to_idx = {c: i for i, c in enumerate(classes)}
+        idx_to_label = {i: c for i, c in enumerate(classes)}
+        encoded_labels = [label_to_idx[l] for l in labels]
+        return encoded_labels, len(classes), idx_to_label
+
+    def _create_tensor_dataset(self, X, y):
+        # X can be np.ndarray or torch.Tensor
+        if isinstance(X, torch.Tensor):
+            X_tensor = X
+        else:
+            X_tensor = torch.tensor(X, dtype=torch.float32)
+        y_tensor = torch.tensor(y, dtype=torch.long)
+        ds = TensorDataset(X_tensor, y_tensor)
+        return ds
+
+    def _normalize_audio_volume(self, y, eps=1e-9):
+        rms = np.sqrt(np.mean(y ** 2))
+        return y / (rms + eps)
+
+
+    # --- INFERENCE Functions
+    def extract_inference_features(self,
+                                   audio_loader: AudioDatasetLoader,
+                                   mfcc_config: MFCCConfig = None,
+                                   melspec_config: MelSpecConfig = None,
+                                   scaler: StandardScaler = None
+    ):
+
+        if mfcc_config is None:
+            mfcc_config = asdict(MFCCConfig())
+        mfcc_features,_,_,_ = self.extract_mfcc_features(
+            audio_loader,
+            mfcc_config["N_MFCC"],
+            mfcc_config["NORMALIZE_AUDIO_VOLUME"],
+            mfcc_config["ADD_PITCH_FEATURES"],
+        )
+        if scaler: # or if mlp_config.STANDARD_SCALER
+            mfcc_features = scaler.transform(mfcc_features)
+
+        if melspec_config is None:
+            melspec_config = asdict(MelSpecConfig())
+        melspec_features,_,_,_ = self.extract_melspec_features(
+            audio_loader,
+            melspec_config["N_MELS"],
+            melspec_config["N_FFT"],
+            melspec_config["HOP_LENGTH"],
+            melspec_config["NORMALIZE_AUDIO_VOLUME"]
+        )
+
+        return mfcc_features, melspec_features
+
+
+    # --- MFCC Functions ---
+    def extract_mfcc_features(self,
+                              audio_loader,
+                              n_mfcc=13,
+                              normalize_audio_volume: bool = False, # check if needed
+                              add_pitch_features: bool = True,
+    ):
+        """
+        Main extraction function for MFCC Features.
+        Convert audio to MFCCs (mean pooled over time).
+
+        Returns:
+            X: np.ndarray, shape (N, n_mfcc)
+            y_encoded: np.array, shape (N,)
+            num_classes: int
+            reverse_map: dict[int -> label]
+        """
+        X = []
+
+        wavs, srs, labels, _ = audio_loader.load_audio_dataset(pad_to_max=True)
+
+        for wave in wavs:
+            y = wave
+            if normalize_audio_volume:
+                y = self._normalize_audio_volume(y)
+
+            mfcc = librosa.feature.mfcc(
+                y=y,
+                sr=audio_loader.target_sr,
+                n_mfcc=n_mfcc
+            )  # shape: (n_mfcc, n_frames)
+
+            mfcc_vec = mfcc.mean(axis=1)  # shape: (n_mfcc,)
+
+            #if normalize_features: # depreciated - replaced by scaler
+            #    mfcc_vec = (mfcc_vec - mfcc_vec.mean()) / (mfcc_vec.std() + 1e-6)
+
+            # --- Experimental: DSP pitch feature ---
+            if add_pitch_features:
+                yin = YinDsp() # fmin=, fmax=
+                pitch_hz, note_info = yin.estimate_pitch(wave, audio_loader.target_sr)
+
+                if pitch_hz is not None:
+                    pitch_feat = float(np.log10(pitch_hz))
+                    dsp_feats = np.array([pitch_feat], dtype=np.float32) 
+                    mfcc_vec = np.concatenate((mfcc_vec, dsp_feats), axis=0)
+
+            X.append(mfcc_vec)
+
+        X = np.vstack(X)                      # shape: (n_samples, n_mfcc)
+        y = np.array(labels, dtype=str)       # raw label strings
+
+        y_encoded, num_classes, reverse_map = self._encode_labels_to_ints(y)
+        y_encoded = np.array(y_encoded, dtype=int)
+
+        print(f"Extracted MFCC features for {len(X)} samples.")
+
+        return X, y_encoded, num_classes, reverse_map
+
+
+    def build_mfcc_train_val_dataloaders(
+            self,
+            audio_loader, 
+            n_mfcc=13,
+            batch_size: int = 32,
+            val_size: float = 0.2,
+            shuffle_train: bool = True,
+            shuffle_val: bool = False,
+            normalize_audio_volume=False,
+            standard_scaler: bool = True,
+            seed: int = 42,
+            num_workers: int = 0,
+            pin_memory: bool = True,
+            drop_last: bool = False
+    ):
+        """
+        MFCC-only train/val DataLoaders (for MLP).
+        """
+        # 1) extract features
+        X, y_encoded, num_classes, reverse_map = self.extract_mfcc_features(audio_loader, n_mfcc, normalize_audio_volume)
+
+        # 2) stratified split
+        X_tr, X_val, y_tr, y_val = train_test_split(
+            X, y_encoded,
+            test_size=val_size,
+            stratify=y_encoded,
+            random_state=seed,
+        )
+
+        if standard_scaler:
+            scaler = StandardScaler().fit(X_tr)
+            X_tr = scaler.transform(X_tr)
+            X_val = scaler.transform(X_val)
+            self.scaler = scaler
+        else:
+            scaler = None
+
+        # 3) datasets
+        ds_tr  = self._create_tensor_dataset(X_tr, y_tr)
+        ds_val = self._create_tensor_dataset(X_val, y_val)
+
+        # 4) loaders
+        dl_tr = DataLoader(
+            ds_tr, batch_size=batch_size, shuffle=shuffle_train,
+            num_workers=num_workers, pin_memory=pin_memory, drop_last=drop_last
+        )
+        dl_val = DataLoader(
+            ds_val, batch_size=batch_size, shuffle=shuffle_val,
+            num_workers=num_workers, pin_memory=pin_memory, drop_last=False
+        )
+
+        return dl_tr, dl_val, X, y_encoded, num_classes, reverse_map, scaler
+
+    # --- Mel Spectrogram Functions ---
+    def extract_melspec_features(
+        self,
+        audio_loader,
+        n_mels: int = 128,
+        n_fft: int = 1024,
+        hop_length: int = 256,
+        normalize_audio_volume: bool = False, # check if needed
+        to_db: bool = True,
+    ):
+        """
+        Convert audio to Mel-spectrograms (2D time-frequency map).
+
+        Returns:
+            X: torch.Tensor, shape (N, 1, n_mels, T_max)
+            y_encoded: np.ndarray, shape (N,)
+            num_classes: int
+            reverse_map: dict[int -> label]
+        """
+
+        target_sr = audio_loader.target_sr
+
+        mel_transform = ta.transforms.MelSpectrogram(
+            sample_rate=target_sr,
+            n_fft=n_fft,
+            hop_length=hop_length,
+            n_mels=n_mels,
+            power=2.0,
+        )
+        to_db_transform = ta.transforms.AmplitudeToDB(stype="power")
+
+        wavs, srs, labels, _ = audio_loader.load_audio_dataset(pad_to_max=True)
+
+        specs = []
+        for wave in wavs:
+            y = wave.astype(np.float32)
+            if normalize_audio_volume:
+                y = self._normalize_audio_volume(y)
+
+            y_t = torch.from_numpy(y).unsqueeze(0)   # (1, T)
+            spec = mel_transform(y_t)                # (1, n_mels, T_spec)
+            if to_db:
+                spec = to_db_transform(spec)         # (1, n_mels, T_spec)
+
+            specs.append(spec)
+
+        # Pad/crop to max T so we can stack
+        max_T = max(s.shape[-1] for s in specs)
+        padded = []
+        for s in specs:
+            T = s.shape[-1]
+            if T < max_T:
+                s = torch.nn.functional.pad(s, (0, max_T - T))
+            elif T > max_T:
+                s = s[..., :max_T]
+            padded.append(s)
+
+        X = torch.stack(padded, dim=0)          # (N, 1, n_mels, T_max)
+        y = np.array(labels, dtype=str)
+
+        y_encoded, num_classes, reverse_map = self._encode_labels_to_ints(y)
+        y_encoded = np.array(y_encoded, dtype=int)
+
+        print(f"Extracted Mel-spectrogram features for {X.shape[0]} samples. X shape: {tuple(X.shape)}")
+
+        return X, y_encoded, num_classes, reverse_map
+
+
+
+    def build_melspec_dataloader(self,
+                              audio_loader,
+                              n_mels: int = 128,
+                              n_fft: int = 1024,
+                              hop_length: int = 256,
+                              batch_size: int = 32,
+                              shuffle: bool = True,
+                              normalize_audio_volume: bool = False):
+        """
+        Mel-spectrogram DataLoader (for CNN).
+        """
+
+        X, y_encoded, num_classes, reverse_map = self.extract_melspec_features(
+            audio_loader=audio_loader,
+            n_mels=n_mels,
+            n_fft=n_fft,
+            hop_length=hop_length,
+            normalize_audio_volume=normalize_audio_volume
+        )
+
+        dataset = self._create_tensor_dataset(X, y_encoded)
+        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
+        return dataloader, num_classes, reverse_map
+
+    def build_melspec_train_val_dataloaders(
+        self,
+        audio_loader, 
+        n_mels: int = 128,
+        n_fft: int = 1024,
+        hop_length: int = 256,
+        batch_size: int = 32,
+        val_size: float = 0.2,
+        shuffle_train: bool = True,
+        shuffle_val: bool = False,
+        normalize_audio_volume: bool = False,
+        seed: int = 42,
+        num_workers: int = 0,
+        pin_memory: bool = True,
+        drop_last: bool = False
+    ):
+        """
+        Mel-spectrogram train/val DataLoaders (for CNN).
+
+        Note: no StandardScaler is applied here by default, because CNNs usually
+        work directly on spectrogram values (optionally normalized/standardized
+        inside the model or via custom transforms).
+        """
+
+        # 1) features + labels
+        X, y_encoded, num_classes, reverse_map = self.extract_melspec_features(
+            audio_loader=audio_loader,
+            n_mels=n_mels,
+            n_fft=n_fft,
+            hop_length=hop_length,
+            normalize_audio_volume=normalize_audio_volume
+        )
+
+        # 2) stratified split
+        indices = np.arange(len(y_encoded))
+        idx_tr, idx_val, y_tr, y_val = train_test_split(
+            indices,
+            y_encoded,
+            test_size=val_size,
+            stratify=y_encoded,
+            random_state=seed,
+        )
+
+        X_tr  = X[idx_tr]
+        X_val = X[idx_val]
+
+        # 3) datasets
+        ds_tr  = self._create_tensor_dataset(X_tr, y_tr)
+        ds_val = self._create_tensor_dataset(X_val, y_val)
+
+        # 4) loaders
+        dl_tr = DataLoader(
+            ds_tr,
+            batch_size=batch_size,
+            shuffle=shuffle_train,
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+            drop_last=drop_last,
+        )
+        dl_val = DataLoader(
+            ds_val,
+            batch_size=batch_size,
+            shuffle=shuffle_val,
+            num_workers=num_workers,
+            pin_memory=pin_memory,
+            drop_last=False,
+        )
+
+        return dl_tr, dl_val, X, y_encoded, num_classes, reverse_map
+
+
+
+
+    # --- Audio array inference methods (single audio) (non-disk) (main use: Live Mic Transcriber) ---
+    def extract_inference_features_from_audio(
+        self,
+        audio: np.ndarray,
+        target_sr: int = TARGET_SR,
+        mfcc_config: MFCCConfig = None,
+        melspec_config: MelSpecConfig = None,
+        scaler: StandardScaler = None,
+        melspec_to_db: bool = True
+    ):
+
+        if mfcc_config is None:
+            mfcc_config = asdict(MFCCConfig())
+        if melspec_config is None:
+            melspec_config = asdict(MelSpecConfig())
+        add_pitch_features=True
+
+        # --- Extract MFCC Features -----------------------------------------------------------
+        y = audio.astype(np.float32)
+        if mfcc_config["NORMALIZE_AUDIO_VOLUME"]:
+            y = self._normalize_audio_volume(y)
+
+        mfcc = librosa.feature.mfcc(
+            y=y,
+            sr=target_sr,
+            n_mfcc=mfcc_config["N_MFCC"],
+        )  # shape: (n_mfcc, n_frames)
+
+        mfcc_vec = mfcc.mean(axis=1)  # shape: (n_mfcc,)
+
+        # --- Experimental: DSP pitch feature ---
+        if mfcc_config["ADD_PITCH_FEATURES"]:
+            yin = YinDsp() # fmin=, fmax=
+            pitch_hz, note_info = yin.estimate_pitch(y, target_sr=target_sr)
+
+            if pitch_hz is not None:
+                pitch_feat = float(np.log10(pitch_hz))
+                dsp_feats = np.array([pitch_feat], dtype=np.float32)
+                mfcc_vec = np.concatenate((mfcc_vec, dsp_feats), axis=0)
+
+        mfcc_features = np.vstack([mfcc_vec])  # shape: (n_samples, n_mfcc)
+        # ---------------------------------------------------------------------------------------
+
+
+        # --- Extract MelSpec Features ----------------------------------------------------------
+        # performance consideration when creating again for every note (single audio)
+        mel_transform = ta.transforms.MelSpectrogram(
+            sample_rate=target_sr,
+            n_fft=melspec_config["N_FFT"],
+            hop_length=melspec_config["HOP_LENGTH"],
+            n_mels=melspec_config["N_MELS"],
+            power=2.0,
+        )
+        to_db_transform = ta.transforms.AmplitudeToDB(stype="power")
+
+        y = audio.astype(np.float32)
+        if melspec_config["NORMALIZE_AUDIO_VOLUME"]:
+            y = self._normalize_audio_volume(y)
+
+        y_t = torch.from_numpy(y).unsqueeze(0)  # (1, T)
+        spec = mel_transform(y_t)  # (1, n_mels, T_spec)
+        if melspec_to_db: # always true - not yet in Config
+            spec = to_db_transform(spec)
+
+        spec_np = spec.cpu().numpy()  # (1, n_mels, T_spec)
+        melspec_features = spec_np[:, None, :, :]  # (1, 1, n_mels, T_spec)
+        # ---------------------------------------------------------------------------------------
+
+        return mfcc_features, melspec_features
+

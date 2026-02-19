@@ -1,12 +1,12 @@
 # note_predictor.py
 import os, time
 from pathlib import Path
-from source.config import *
-from source.audio.loading import *
-from source.audio.features import *
-from source.training.mlp_trainer import *
-from source.training.cnn_trainer import *
-import source.dsp.yin
+from config import *
+from audio.loading import *
+from audio.features import *
+from training.mlp_trainer import *
+from training.cnn_trainer import *
+import dsp.yin
 import numpy as np
 import torch
 
@@ -24,7 +24,6 @@ class NotePredictor:
 
         self.cnn_weight = 0.80
         self.mlp_weight = (1.0 - self.cnn_weight)
-        # yin/dsp weight?
 
     # - MODELS
     def load_models(
@@ -35,10 +34,6 @@ class NotePredictor:
         """Loads: mlp, cnn, reverse_map from checkpoints."""
 
         # ---- Load MLP checkpoint ----
-        #mlp_path = os.path.join(mlp_root, mlp_ckpt)
-        #if not os.path.isfile(mlp_path):
-        #    raise FileNotFoundError(f"[load_models] No MLP checkpoint found: {mlp_path}")
-        #mlp_ckpt_data = torch.load(mlp_path, map_location="cpu", weights_only=False)
 
         if mlp_ckpt_data is not None:
             # initialize mlp model
@@ -61,17 +56,8 @@ class NotePredictor:
                     self.reverse_map = rm
                     print("[load_models] Loaded reverse_map from MLP checkpoint.")
 
-            # assign config
-            #self.configs["mlp_config"] = mlp_ckpt_data["config"]
-            #if self.configs["mlp_config"] is not None:
-            #    print("[load_models] Loaded MLP config")
-
 
         # ---- Load CNN checkpoint ----
-        #cnn_path = os.path.join(cnn_root, cnn_ckpt)
-        #if not os.path.isfile(cnn_path):
-        #    raise FileNotFoundError(f"[load_models] No MLP checkpoint found: {mlp_path}")
-        #cnn_ckpt_data = torch.load(cnn_path, map_location="cpu", weights_only=False)
 
         if cnn_ckpt_data is not None:
             # initialize cnn model
@@ -86,11 +72,6 @@ class NotePredictor:
             self.cnn.to(self.device)
             self.cnn.eval()
             print(f"[load_models] Loaded CNN model")
-
-            # assign config
-            #self.configs["cnn_config"] = cnn_ckpt_data["config"]
-            #if self.configs["cnn_config"] is not None:
-            #    print("[load_models] Loaded CNN config")
 
 
         # ---- Final output ----
@@ -174,18 +155,3 @@ class NotePredictor:
         self.cnn_weight = cnn_weight
         self.mlp_weight = mlp_weight
         return predictions
-
-
-
-
-
-def main():
-    pass
-    #predictor = NotePredictor()
-    #predictor.load_models()
-
-
-if __name__ == "__main__":
-    pass
-    #main()
-
