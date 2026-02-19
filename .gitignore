@@ -16,7 +16,6 @@ Recordings/
 *.pth
 *.h5
 *.csv
-checkpoints/
 Model Data/
 
 # Python noise
