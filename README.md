@@ -8,19 +8,20 @@ The project sits at the intersection of:
 
 - Practical audio tool development  
 - Machine learning experimentation  
-- Classical DSP comparison  
+- Classical DSP 
 - Real-time inference systems  
 
 ---
 
+
 ## Project Status
 
-Version 1 establishes a stable foundation for single-note transcription.
+Version 1 establishes a stable foundation for single clip transcription.
 
 The current focus is:
 
-- Clean architecture
 - Reliable inference
+- Clean architecture
 - Structured evaluation
 - Modular expansion for future research and application features
 
@@ -28,9 +29,20 @@ This is an actively evolving system — usable, but still expanding in capabilit
 
 ---
 
+## Development Status
+
+This repository represents an active research and development codebase.
+
+Version 1 prioritizes architectural clarity and model validation over deployment tooling.
+
+**The project is evolving, and you should expect ongoing refactors, experimental features, and occasional breaking changes as the system expands.**
+
+---
+
 ## Version 1 Goals
 
 Version 1 focuses on **robust monophonic pitch classification**.
+> Note: This version does not contain many of the features found in **'prototyping'**
 
 ### Completed
 
@@ -38,19 +50,23 @@ Version 1 focuses on **robust monophonic pitch classification**.
 - [x] Onset-based automatic note slicing  
 - [x] MFCC + Mel-Spectrogram feature pipelines  
 - [x] CNN and MLP model architectures  
-- [x] Ensemble-style inference support  
+- [x] Ensemble-style inference support
+- [x] YIN baseline  
 - [x] Structured inference API for in-memory audio  
 - [x] Scientific Pitch Notation output (`E2`, `F#3`, etc.)  
 - [x] Modular, cleaned source organization  
 
 ### In Progress / Next Steps
 
-- [ ] Domain adaptation across guitar types (acoustic → electric)  
+- [ ] Domain adaptation across guitar types and effects (acoustic → electric, Clean → High Gain)  
 - [ ] Expanded evaluation methodology  
 - [ ] Improved segmentation robustness  
 - [ ] Structured benchmark comparison against DSP (e.g., YIN)  
+- [ ] Packaged application
+
 
 ---
+
 
 ## System Overview
 
@@ -145,4 +161,4 @@ The goal is not only pitch detection, but understanding how learned representati
 
 This is a passion-driven, research-oriented build evolving toward a more complete application.
 
-If you're interested in audio ML, transcription systems, or hybrid DSP + neural approaches, feel free to follow the project or reach out.
+If you're interested in audio ML, transcription systems, or hybrid DSP + neural approaches, feel free to follow the project or reach out!
