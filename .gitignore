@@ -35,7 +35,5 @@ venv/
 Thumbs.db
 
 
-# Version 1
-!version_1/data/
+# Version 1 (ALLOW)
 !version_1/data/checkpoints/
-!version_1/data/inference/
