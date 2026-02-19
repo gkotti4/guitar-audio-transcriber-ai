@@ -1,115 +1,148 @@
-# Guitar Audio Transcriber (In Development)
+# Guitar Audio Transcriber
 
-A deep learning + DSP research project focused on converting raw guitar audio into note predictions and, eventually, full tablature.  
-This repository contains **early-stage prototypes**, model training pipelines, and dataset experimentation for single-note guitar transcription.
+An in-development audio application and research-driven project focused on monophonic guitar pitch transcription.
+
+This system converts raw guitar audio into structured note predictions (e.g., `E2`, `F#3`) using a hybrid signal processing + deep learning pipeline.
+
+The project sits at the intersection of:
+
+- Practical audio tool development  
+- Machine learning experimentation  
+- Classical DSP comparison  
+- Real-time inference systems  
 
 ---
 
 ## Project Status
 
-**This project is currently in active development and prototyping.**  
-It is **not feature-complete, not stable, and not yet intended for public use or reproduction**.  
+Version 1 establishes a stable foundation for single-note transcription.
 
-Expect:
-- Breaking changes
-- Experimental model architectures
-- Dataset restructuring
-- Inconsistent comments
-- Incomplete documentation
-- Duplicated code
-- Non-final evaluation methods
-- Paths, configs, and scripts that may depend on a specific local setup
+The current focus is:
 
-**This is a *research* codebase, not a packaged tool.**  
-**This project does *not* include any of the datasets used in model training.**  
+- Clean architecture
+- Reliable inference
+- Structured evaluation
+- Modular expansion for future research and application features
+
+This is an actively evolving system — usable, but still expanding in capability and scope.
 
 ---
 
-## Prototype Version 1.0 Goals
+## Version 1 Goals
 
-- [x] Build a reliable pipeline for classifying single guitar notes
-- [x] Train and compare MLP and CNN architectures
-- [x] Produce prediction scores from multiple models (ensemble inference)
-- [x] Establish feature processing (MFCC / Mel-Spectrograms) and training infrastructure
-- [x] Create a labeled dataset via automated slicing of recorded guitar clips
-- [x] Begin mapping pitch predictions to playable guitar tablature
-- [ ] Add fine-tuning and domain adaptation (acoustic → electric)
-- [ ] Expand beyond single-note classification
+Version 1 focuses on **robust monophonic pitch classification**.
+
+### Completed
+
+- [x] Reliable end-to-end transcription pipeline  
+- [x] Onset-based automatic note slicing  
+- [x] MFCC + Mel-Spectrogram feature pipelines  
+- [x] CNN and MLP model architectures  
+- [x] Ensemble-style inference support  
+- [x] Structured inference API for in-memory audio  
+- [x] Scientific Pitch Notation output (`E2`, `F#3`, etc.)  
+- [x] Modular, cleaned source organization  
+
+### In Progress / Next Steps
+
+- [ ] Domain adaptation across guitar types (acoustic → electric)  
+- [ ] Expanded evaluation methodology  
+- [ ] Improved segmentation robustness  
+- [ ] Structured benchmark comparison against DSP (e.g., YIN)  
+
+---
+
+## System Overview
+
+### Processing Pipeline
+
+Audio → Segmentation → Feature Extraction → Model Inference → Pitch Output
+
+
+### Architecture
+
+| Layer | Description |
+|--------|-------------|
+| Audio Processing | Onset detection and controlled slicing |
+| Feature Representation | MFCC (MLP) + Mel-Spectrogram (CNN) |
+| Models | PyTorch CNN (primary) + MLP (baseline / ensemble) |
+| Inference | Single-clip and batch prediction |
+| Output | Structured pitch predictions |
+
+The CNN currently serves as the dominant model, with the MLP acting as a lightweight baseline and ensemble component.
 
 ---
 
 ## Upcoming / Experimental Prototypes
-- Live tab tracking (real-time)
-- HTML tab viewer with audio playback
-- MIDI export / plugin integration
+
+- Real-time streaming transcription (live mic / interface input)
+- HTML viewer with synchronized audio playback
+- MIDI export and DAW integration
+- Position-aware modeling (pitch + string prediction)
+- Extended dataset augmentation pipelines
 
 ---
 
-## Future Research Directions
-- Polyphonic transcription and chord recognition
+## Research Direction
+
+While the system functions as an application pipeline, it also serves as a research platform exploring:
+
+- Learned pitch representations vs classical DSP
+- Model robustness under tonal variation
+- Feature representation tradeoffs
+- Real-time inference constraints
+- Guitar-specific modeling challenges
+
+Long-term research directions include:
+
+- Domain generalization across instruments and pickups  
+- Position-aware fretboard inference  
+- Hybrid ML + DSP arbitration strategies  
+- Polyphonic transcription  
 
 ---
 
-## Technical Overview
+## Repository Scope
 
-| Component | Current State |
-|---|---|
-| Feature Extraction | MFCC & Mel-Spectrogram pipelines tested |
-| Models | MLP, CNN |
-| Dataset | Acoustic and electric guitar datasets under evaluation |
-| Augmentation | Gain, noise, distortion, time-stretch (in progress) |
-| Output | Note classification (e.g., `E2`, `F#3`) |
-| End Goal | Full audio → guitar tab transcription |
+This repository contains:
 
----
+- Clean Version 1 transcription pipeline  
+- Modular audio processing components  
+- Model loading and inference infrastructure  
+- Organized source structure  
 
-## Development Notes
+It does **not** include:
 
-- Acoustic data currently provides the best training signal
-- Electric guitar introduces domain variance that will require adaptation
-- Label consistency uses **Scientific Pitch Notation** (`E2`, `F#3`, `C4`)
-- Model performance is being validated before expanding the problem scope
+- Full training datasets  
+- Complete reproducible training configs  
+- Packaged end-user application builds  
 
 ---
 
-## Public Usage Disclaimer
+## Technical Stack
 
-This repository is **not yet ready for cloning or external execution**.  
-Many components assume local files, in-progress tooling, and not yet uploaded files.
-
-If you're interested in the project direction or future collaboration, feel free to follow or reach out.
-
-A cleaned, reproducible, and documented version will be released once the prototype stabilizes.
-
----
-
-## Planned Public Release Milestones
-
-1. **Stable note classification model**
-2. **Clean dataset format + instructions**
-3. **Unified training & evaluation pipeline**
-4. **Inference API for single notes**
-5. **Optional tab prediction module**
-6. **Public demo or notebook**
+- Python  
+- PyTorch  
+- Librosa  
+- NumPy  
+- Scikit-learn  
+- Hybrid DSP + Deep Learning  
 
 ---
 
-## Tech Stack
+## Vision
 
-- Python
-- PyTorch
-- Librosa
-- NumPy
-- Scikit-learn
-- Signal processing + deep learning hybrids
-- ~ Pandas + pyplot
+This project is both:
 
----
+- A functional transcription tool in development  
+- A long-term exploration of guitar-focused ML modeling  
 
-## Contact / Follow Progress
-
-If this project interests you, star or follow for updates — or reach out for research discussion.
+The goal is not only pitch detection, but understanding how learned representations interact with physical instrument constraints and real-world signal variability.
 
 ---
 
-*This project is a work in progress — expect improvement, iteration, and change.*
+## Follow Development
+
+This is a passion-driven, research-oriented build evolving toward a more complete application.
+
+If you're interested in audio ML, transcription systems, or hybrid DSP + neural approaches, feel free to follow the project or reach out.
